@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <title>やる価バンク 2.0</title>
+  <meta name="description" content="仕事タスクを毎日のクエストに変換して報酬を稼ぐゲーム">
+  <meta name="theme-color" content="#1a1d29">
+  <!-- iOS PWA -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="やる価バンク">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <main id="app">
+
+    <!-- ============ 1. ホーム(今日のクエスト) ============ -->
+    <section class="screen active" id="screen-home">
+      <header class="screen-header">
+        <h1 class="app-title">やる価バンク</h1>
+        <div class="streak-badge" id="streak-badge">🔥 <span id="streak-days">0</span>日</div>
+      </header>
+
+      <!-- 本日残高 -->
+      <div class="balance-card">
+        <div class="balance-label">本日の獲得</div>
+        <div class="balance-amount"><span id="today-total">0</span><span class="yen">円</span></div>
+      </div>
+
+      <!-- メインゲージ: 週末軍資金まであと〇〇円(最重要UI) -->
+      <div class="main-gauge card" id="main-gauge">
+        <div class="gauge-title">週末軍資金まであと <strong id="gauge-remaining">5,000</strong> 円</div>
+        <div class="gauge-bar"><div class="gauge-fill" id="gauge-fill" style="width:0%"></div></div>
+      </div>
+
+      <!-- 今日のクエスト -->
+      <div class="section-title">
+        <h2>今日のクエスト</h2>
+        <button class="btn btn-small" id="btn-generate-quests">✨ 生成</button>
+      </div>
+      <ul class="quest-list" id="quest-list">
+        <li class="empty-state">「生成」ボタンで今日のクエストを作成<br><small>(AI生成は手順3で実装予定)</small></li>
+      </ul>
+      <button class="btn btn-ghost" id="btn-add-quest">+ 手動でクエスト追加</button>
+
+      <!-- 固定給コンボ -->
+      <div class="combo-row">
+        <button class="combo-btn" id="btn-morning-combo">🌅 モーニングコンボ<br><span class="combo-price">+300円</span></button>
+        <button class="combo-btn" id="btn-night-combo">🌙 ナイトコンボ<br><span class="combo-price">+300円</span></button>
+      </div>
+
+      <!-- 初トライ&ラッキー -->
+      <div class="card mini-card" id="first-try-card">
+        <div class="mini-card-title">🚀 初トライ</div>
+        <div class="mini-card-body" id="first-try-body">クエスト生成時にヒントを提案(手順3)</div>
+      </div>
+      <div class="card mini-card" id="lucky-card">
+        <div class="mini-card-title">🍀 ラッキーポスチャー</div>
+        <div class="mini-card-body" id="lucky-body">今日の気づきを一言記録で +100円</div>
+      </div>
+    </section>
+
+    <!-- ============ 2. 習慣(カウンター式) ============ -->
+    <section class="screen" id="screen-habits">
+      <header class="screen-header"><h1>習慣</h1></header>
+      <ul class="habit-list" id="habit-list"></ul>
+      <button class="btn btn-ghost" id="btn-add-habit">+ 習慣を追加</button>
+    </section>
+
+    <!-- ============ 3. ゲージ(ご褒美) ============ -->
+    <section class="screen" id="screen-gauges">
+      <header class="screen-header"><h1>ご褒美ゲージ</h1></header>
+      <div id="gauge-list"></div>
+      <div class="section-title"><h2>殿堂ゴール</h2></div>
+      <div id="hall-of-fame-list"></div>
+    </section>
+
+    <!-- ============ 4. プロジェクト管理 ============ -->
+    <section class="screen" id="screen-projects">
+      <header class="screen-header"><h1>プロジェクト</h1></header>
+      <ul class="project-list" id="project-list"></ul>
+      <button class="btn btn-ghost" id="btn-add-project">+ プロジェクトを追加</button>
+    </section>
+
+    <!-- ============ 5. 夜の締め(集計) ============ -->
+    <section class="screen" id="screen-close">
+      <header class="screen-header"><h1>夜の締め</h1></header>
+      <div class="card">
+        <div class="close-total-label">本日の獲得合計</div>
+        <div class="close-total" id="close-total">0円</div>
+        <ul class="close-breakdown" id="close-breakdown"></ul>
+      </div>
+      <div class="card highlight-card" id="piggy-card">
+        <div class="piggy-message">🐷 貯金箱に <strong id="piggy-amount">0</strong> 円入れてください</div>
+        <button class="btn btn-primary" id="btn-piggy-done">貯金箱に入れた!</button>
+      </div>
+      <div class="card" id="close-streak-card"></div>
+      <div class="card" id="close-gauges-card"></div>
+      <div class="card notice-card hidden" id="backup-reminder">
+        📦 日曜日です。設定タブからバックアップを取りましょう
+      </div>
+    </section>
+
+    <!-- ============ 6. 設定 ============ -->
+    <section class="screen" id="screen-settings">
+      <header class="screen-header"><h1>設定</h1></header>
+
+      <div class="card">
+        <h2 class="card-title">Anthropic APIキー</h2>
+        <input type="password" id="input-api-key" class="text-input" placeholder="sk-ant-...">
+        <button class="btn btn-small" id="btn-save-api-key">保存</button>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">固定料金表(円)</h2>
+        <table class="price-table" id="price-table">
+          <thead>
+            <tr><th></th><th>小</th><th>中</th><th>大</th></tr>
+          </thead>
+          <tbody><!-- JSで生成 --></tbody>
+        </table>
+        <p class="hint">行=難易度 / 列=インパクト。タップで編集(次段階で実装)</p>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">バックアップ</h2>
+        <button class="btn" id="btn-export">📋 全データをコピー(書き出し)</button>
+        <button class="btn" id="btn-import">📥 テキスト貼り付けで復元</button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ============ 下部タブバー ============ -->
+  <nav class="tab-bar">
+    <button class="tab active" data-screen="home">🏠<span>ホーム</span></button>
+    <button class="tab" data-screen="habits">✅<span>習慣</span></button>
+    <button class="tab" data-screen="gauges">🎁<span>ゲージ</span></button>
+    <button class="tab" data-screen="projects">📁<span>PJ</span></button>
+    <button class="tab" data-screen="close">🌙<span>締め</span></button>
+    <button class="tab" data-screen="settings">⚙️<span>設定</span></button>
+  </nav>
+
+  <script src="js/storage.js"></script>
+  <script src="js/app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js');
+    }
+  </script>
+</body>
+</html>

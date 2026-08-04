@@ -1,0 +1,16 @@
+{
+  "name": "やる価バンク 2.0",
+  "short_name": "やる価バンク",
+  "description": "仕事タスクを毎日のクエストに変換して報酬を稼ぐゲーム",
+  "lang": "ja",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1a1d29",
+  "theme_color": "#1a1d29",
+  "icons": [
+    { "src": "icons/icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

@@ -1,0 +1,322 @@
+/* ============================================================
+ * やる価バンク 2.0 — モバイルファースト / 片手操作前提
+ * ============================================================ */
+
+:root {
+  --bg: #1a1d29;
+  --bg-card: #252938;
+  --bg-card-2: #2e3345;
+  --text: #f0f2f8;
+  --text-dim: #9aa0b4;
+  --accent: #ffc93c;      /* 報酬・金額のゴールド */
+  --accent-green: #4ade80;
+  --primary: #6366f1;
+  --danger: #f87171;
+  --radius: 14px;
+  --tab-height: 64px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  padding-bottom: calc(var(--tab-height) + env(safe-area-inset-bottom));
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ---------- 画面切替 ---------- */
+
+.screen {
+  display: none;
+  padding: 16px;
+  padding-top: calc(12px + env(safe-area-inset-top));
+  max-width: 480px;
+  margin: 0 auto;
+}
+.screen.active { display: block; }
+
+.screen-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.screen-header h1 { font-size: 20px; font-weight: 700; }
+.app-title { color: var(--accent); }
+
+/* ---------- 共通パーツ ---------- */
+
+.card {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.card-title { font-size: 15px; font-weight: 600; margin-bottom: 10px; color: var(--text-dim); }
+
+.section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 18px 0 10px;
+}
+.section-title h2 { font-size: 16px; font-weight: 700; }
+
+.btn {
+  display: block;
+  width: 100%;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--bg-card-2);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+  padding: 14px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.btn:active { opacity: 0.7; }
+.btn-primary { background: var(--primary); }
+.btn-small { width: auto; display: inline-block; padding: 8px 16px; font-size: 13px; margin: 0; }
+.btn-ghost {
+  background: transparent;
+  border: 1.5px dashed var(--text-dim);
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+.hidden { display: none !important; }
+.hint { font-size: 12px; color: var(--text-dim); margin-top: 8px; }
+
+.text-input {
+  width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--bg-card-2);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  margin-bottom: 10px;
+  font-family: inherit;
+}
+
+/* ---------- ホーム ---------- */
+
+.streak-badge {
+  background: var(--bg-card);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.balance-card {
+  background: linear-gradient(135deg, #2d3250, #1f2338);
+  border-radius: var(--radius);
+  padding: 18px;
+  text-align: center;
+  margin-bottom: 12px;
+}
+.balance-label { font-size: 13px; color: var(--text-dim); }
+.balance-amount { font-size: 40px; font-weight: 800; color: var(--accent); }
+.balance-amount .yen { font-size: 20px; margin-left: 2px; }
+
+.main-gauge .gauge-title { font-size: 14px; margin-bottom: 8px; }
+.main-gauge .gauge-title strong { color: var(--accent); font-size: 18px; }
+
+.gauge-bar {
+  height: 12px;
+  background: var(--bg);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.gauge-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #ff9f1c);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+/* クエストリスト */
+
+.quest-list { list-style: none; }
+.quest-list .empty-state {
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 14px;
+  padding: 24px 12px;
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  margin-bottom: 10px;
+}
+
+.quest-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 8px;
+}
+.quest-item.done { opacity: 0.55; }
+.quest-item.done .quest-title { text-decoration: line-through; }
+.quest-check {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid var(--text-dim);
+  background: transparent;
+  font-size: 20px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.quest-item.done .quest-check {
+  border-color: var(--accent-green);
+  background: var(--accent-green);
+}
+.quest-body { flex: 1; min-width: 0; }
+.quest-title { font-size: 15px; font-weight: 600; }
+.quest-project { font-size: 12px; color: var(--text-dim); }
+.quest-amount { font-size: 16px; font-weight: 800; color: var(--accent); flex-shrink: 0; }
+
+/* コンボ */
+
+.combo-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 14px 0 10px;
+}
+.combo-btn {
+  border: none;
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 14px 8px;
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1.6;
+}
+.combo-btn:active { opacity: 0.7; }
+.combo-btn.done { background: var(--accent-green); color: #14351f; }
+.combo-price { font-size: 13px; color: var(--accent); font-weight: 800; }
+.combo-btn.done .combo-price { color: #14351f; }
+
+.mini-card { padding: 12px 16px; }
+.mini-card-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+.mini-card-body { font-size: 13px; color: var(--text-dim); }
+
+/* ---------- 習慣 ---------- */
+
+.habit-list { list-style: none; }
+.habit-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 8px;
+}
+.habit-body { flex: 1; }
+.habit-name { font-size: 15px; font-weight: 600; }
+.habit-unit { font-size: 12px; color: var(--text-dim); }
+.habit-count { font-size: 18px; font-weight: 800; color: var(--accent); min-width: 48px; text-align: center; }
+.habit-plus {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: none;
+  background: var(--primary);
+  color: white;
+  font-size: 26px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.habit-plus:active { opacity: 0.7; }
+
+/* ---------- ゲージ ---------- */
+
+.gauge-item { margin-bottom: 4px; }
+.gauge-item .gauge-name { font-size: 14px; font-weight: 600; }
+.gauge-item .gauge-numbers { font-size: 13px; color: var(--text-dim); margin: 4px 0 6px; }
+.gauge-item .gauge-numbers strong { color: var(--accent); }
+
+/* ---------- プロジェクト ---------- */
+
+.project-list { list-style: none; }
+.project-item {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 8px;
+}
+.project-name { font-size: 15px; font-weight: 700; }
+.project-meta { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+.project-deadline-near { color: var(--danger); font-weight: 700; }
+
+/* ---------- 夜の締め ---------- */
+
+.close-total-label { font-size: 13px; color: var(--text-dim); text-align: center; }
+.close-total { font-size: 36px; font-weight: 800; color: var(--accent); text-align: center; margin-bottom: 10px; }
+.close-breakdown { list-style: none; font-size: 14px; }
+.close-breakdown li {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-top: 1px solid var(--bg-card-2);
+}
+.highlight-card { background: linear-gradient(135deg, #3d2f10, #2b230f); border: 1px solid #6b5518; }
+.piggy-message { font-size: 16px; text-align: center; margin-bottom: 12px; }
+.piggy-message strong { color: var(--accent); font-size: 22px; }
+.notice-card { background: #2b2338; text-align: center; font-size: 14px; }
+
+/* ---------- 設定 ---------- */
+
+.price-table { width: 100%; border-collapse: collapse; text-align: center; }
+.price-table th, .price-table td { padding: 8px; font-size: 14px; }
+.price-table th { color: var(--text-dim); font-weight: 600; }
+.price-table td { background: var(--bg); border-radius: 8px; font-weight: 700; color: var(--accent); }
+
+/* ---------- タブバー ---------- */
+
+.tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: calc(var(--tab-height) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  background: #14161f;
+  display: flex;
+  border-top: 1px solid var(--bg-card-2);
+  z-index: 100;
+}
+.tab {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.tab span { font-size: 10px; font-weight: 600; }
+.tab.active { color: var(--accent); }
