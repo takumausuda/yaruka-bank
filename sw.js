@@ -1,7 +1,7 @@
 /* やる価バンク 2.0 — Service Worker(オフライン対応)
  * キャッシュファースト戦略。アプリ更新時は CACHE_VERSION を上げる。 */
 
-const CACHE_VERSION = 'yaruka-v1';
+const CACHE_VERSION = 'yaruka-v2';
 const ASSETS = [
   './',
   './index.html',

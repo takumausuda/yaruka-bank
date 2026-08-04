@@ -86,6 +86,8 @@ body {
 .btn:active { opacity: 0.7; }
 .btn-primary { background: var(--primary); }
 .btn-small { width: auto; display: inline-block; padding: 8px 16px; font-size: 13px; margin: 0; }
+.btn-danger { background: transparent; border: 1.5px solid var(--danger); color: var(--danger); }
+.btn:disabled { opacity: 0.5; }
 .btn-ghost {
   background: transparent;
   border: 1.5px dashed var(--text-dim);
@@ -213,9 +215,13 @@ body {
 .combo-price { font-size: 13px; color: var(--accent); font-weight: 800; }
 .combo-btn.done .combo-price { color: #14351f; }
 
-.mini-card { padding: 12px 16px; }
+.mini-card { padding: 12px 16px; cursor: pointer; }
+.mini-card:active { opacity: 0.7; }
 .mini-card-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
 .mini-card-body { font-size: 13px; color: var(--text-dim); }
+.mini-amount { color: var(--accent); font-weight: 800; }
+.done-card { border: 1px solid var(--accent-green); }
+.done-card .mini-card-body { color: var(--text); }
 
 /* ---------- 習慣 ---------- */
 
@@ -246,6 +252,18 @@ body {
   flex-shrink: 0;
 }
 .habit-plus:active { opacity: 0.7; }
+.habit-minus {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-dim);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 18px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.habit-minus:active { opacity: 0.7; }
 
 /* ---------- ゲージ ---------- */
 
@@ -288,7 +306,111 @@ body {
 .price-table { width: 100%; border-collapse: collapse; text-align: center; }
 .price-table th, .price-table td { padding: 8px; font-size: 14px; }
 .price-table th { color: var(--text-dim); font-weight: 600; }
-.price-table td { background: var(--bg); border-radius: 8px; font-weight: 700; color: var(--accent); }
+.price-table td { background: var(--bg); border-radius: 8px; font-weight: 700; color: var(--accent); cursor: pointer; }
+.price-table td:active { opacity: 0.7; }
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 15px;
+  cursor: pointer;
+}
+.toggle-row input[type="checkbox"] {
+  width: 24px;
+  height: 24px;
+  accent-color: var(--primary);
+}
+
+/* ---------- 夜の締め: 配分結果 ---------- */
+
+.alloc-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  padding: 5px 0;
+}
+.alloc-row span:last-child { color: var(--accent); font-weight: 700; }
+
+/* ---------- モーダル ---------- */
+
+#modal-root {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.modal-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+}
+.modal-card {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  background: var(--bg-card);
+  border-radius: 20px 20px 0 0;
+  padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+  max-height: 85vh;
+  overflow-y: auto;
+  animation: slide-up 0.22s ease;
+}
+@keyframes slide-up {
+  from { transform: translateY(40%); opacity: 0.5; }
+  to   { transform: translateY(0);   opacity: 1; }
+}
+.modal-title { font-size: 18px; font-weight: 700; margin-bottom: 14px; }
+.modal-label { font-size: 13px; color: var(--text-dim); margin: 10px 0 6px; }
+.modal-amount { font-size: 15px; margin: 14px 0; text-align: center; }
+.modal-amount strong { color: var(--accent); font-size: 20px; }
+
+select.text-input { appearance: none; -webkit-appearance: none; }
+
+/* セグメントボタン(難易度・インパクト・金額の3〜4択) */
+
+.seg-group {
+  display: flex;
+  gap: 8px;
+}
+.seg-btn {
+  flex: 1;
+  padding: 12px 0;
+  border: 1.5px solid var(--bg-card-2);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text-dim);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+.seg-btn.active {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: white;
+}
+
+/* ---------- 計上演出(浮き上がる金額) ---------- */
+
+.float-reward {
+  position: fixed;
+  z-index: 300;
+  transform: translate(-50%, -50%);
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--accent);
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+  animation: float-up 0.9s ease-out forwards;
+}
+@keyframes float-up {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+  15%  { opacity: 1; transform: translate(-50%, -60%) scale(1.15); }
+  100% { opacity: 0; transform: translate(-50%, -220%) scale(1); }
+}
 
 /* ---------- タブバー ---------- */
 

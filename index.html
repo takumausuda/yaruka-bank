@@ -49,8 +49,8 @@
 
       <!-- 固定給コンボ -->
       <div class="combo-row">
-        <button class="combo-btn" id="btn-morning-combo">🌅 モーニングコンボ<br><span class="combo-price">+300円</span></button>
-        <button class="combo-btn" id="btn-night-combo">🌙 ナイトコンボ<br><span class="combo-price">+300円</span></button>
+        <button class="combo-btn" id="btn-morning-combo">🌅 モーニングコンボ<br><span class="combo-price" id="morning-combo-price">+300円</span></button>
+        <button class="combo-btn" id="btn-night-combo">🌙 ナイトコンボ<br><span class="combo-price" id="night-combo-price">+300円</span></button>
       </div>
 
       <!-- 初トライ&ラッキー -->
@@ -98,6 +98,7 @@
         <div class="piggy-message">🐷 貯金箱に <strong id="piggy-amount">0</strong> 円入れてください</div>
         <button class="btn btn-primary" id="btn-piggy-done">貯金箱に入れた!</button>
       </div>
+      <div class="card hidden" id="close-alloc-card"></div>
       <div class="card" id="close-streak-card"></div>
       <div class="card" id="close-gauges-card"></div>
       <div class="card notice-card hidden" id="backup-reminder">
@@ -123,7 +124,15 @@
           </thead>
           <tbody><!-- JSで生成 --></tbody>
         </table>
-        <p class="hint">行=難易度 / 列=インパクト。タップで編集(次段階で実装)</p>
+        <p class="hint">行=難易度 / 列=インパクト。セルをタップで金額を編集</p>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">演出</h2>
+        <label class="toggle-row">
+          <span>効果音</span>
+          <input type="checkbox" id="toggle-sound" checked>
+        </label>
       </div>
 
       <div class="card">
@@ -144,6 +153,12 @@
     <button class="tab" data-screen="close">🌙<span>締め</span></button>
     <button class="tab" data-screen="settings">⚙️<span>設定</span></button>
   </nav>
+
+  <!-- モーダル -->
+  <div id="modal-root" class="hidden">
+    <div class="modal-overlay"></div>
+    <div class="modal-card" id="modal-card"></div>
+  </div>
 
   <script src="js/storage.js"></script>
   <script src="js/app.js"></script>

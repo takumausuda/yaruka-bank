@@ -32,6 +32,7 @@ const Storage = (() => {
   };
 
   // ご褒美ゲージ配分(4.11 月次予算モデル)
+  // allocations の並び順 = 配分の優先順位
   const DEFAULT_GAUGES = {
     allocations: [
       { id: 'weekend',  name: '週末家族軍資金',            monthly: 20000, type: 'weekly',  weeklyTarget: 5000, main: true },
@@ -40,14 +41,16 @@ const Storage = (() => {
       { id: 'travel',   name: '海外旅行資金',              monthly: 10000, type: 'pool' },
       { id: 'travelSv', name: '海外旅行積立',              monthly: 10000, type: 'pool' },
     ],
-    // 殿堂ゴール(登録のみ。余剰・配分変更でいつでも切替可能)
+    // 殿堂ゴール(登録のみ。月間目標超過分の自動積立先は先頭)
     hallOfFame: [
       { id: 'house', name: '新居',       pool: 0 },
       { id: 'car',   name: '車+維持費', pool: 0 },
       { id: 'trip',  name: 'プチ旅行',   pool: 0 },
     ],
-    // 各配分先の現在残高 { allocationId: 円 }
-    balances: {},
+    balances: {},        // 各配分先の現在残高 { allocationId: 円 }
+    monthAllocated: {},  // 今月の配分済み額 { allocationId: 円 }(プールの月上限判定用)
+    week: null,          // 現在の週(週初め月曜の日付)。変わったら週次ゲージをリセット
+    month: null,         // 現在の月 'YYYY-MM'。変わったら月次ゲージをリセット
   };
 
   // 初期登録想定のプロジェクト(4.1)
@@ -74,9 +77,8 @@ const Storage = (() => {
   ];
 
   const DEFAULT_STREAK = {
-    current: 0,        // 連続日数
+    current: 0,        // 連続日数(日別レコードから再計算して保持)
     best: 0,
-    lastDate: null,    // 最後にクエスト達成した日 'YYYY-MM-DD'
   };
 
   /* ---------- 日別レコードのひな形 ---------- */
@@ -91,9 +93,33 @@ const Storage = (() => {
       firstTry: { hint: '', amount: 0, done: false, custom: '' }, // 初トライ(1日1件)
       lucky: { note: '', done: false },                            // ラッキーポスチャー記録
       habitCounts: {},   // { habitId: 回数 }
-      bonus: 0,          // ストリークボーナス等の自動加算
+      bonus: 0,          // ストリークボーナス(到達日に自動加算)
       closed: false,     // 夜の締め「貯金箱に入れた」確認済み
+      allocatedTotal: 0, // 締め時にゲージへ配分した額
     };
+  }
+
+  /* ---------- 日付ヘルパー ---------- */
+
+  function fmt(d) {
+    const p = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  }
+
+  function today() { return fmt(new Date()); }
+
+  function addDays(dateStr, n) {
+    const d = new Date(dateStr + 'T00:00:00');
+    d.setDate(d.getDate() + n);
+    return fmt(d);
+  }
+
+  // 週の起点(月曜)の日付を返す
+  function weekStart(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00');
+    const dow = (d.getDay() + 6) % 7; // 月曜=0
+    d.setDate(d.getDate() - dow);
+    return fmt(d);
   }
 
   /* ---------- 低レベル入出力 ---------- */
@@ -111,13 +137,7 @@ const Storage = (() => {
     localStorage.setItem(key, JSON.stringify(value));
   }
 
-  /* ---------- 公開API ---------- */
-
-  function today() {
-    const d = new Date();
-    const p = n => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-  }
+  /* ---------- 公開API(取得・保存) ---------- */
 
   function getSettings()      { return { ...DEFAULT_SETTINGS, ...load(KEYS.settings, {}) }; }
   function saveSettings(s)    { save(KEYS.settings, s); }
@@ -128,16 +148,16 @@ const Storage = (() => {
   function getHabits()        { return load(KEYS.habits, null) ?? seed(KEYS.habits, DEFAULT_HABITS); }
   function saveHabits(h)      { save(KEYS.habits, h); }
 
-  function getGauges()        { return load(KEYS.gauges, null) ?? seed(KEYS.gauges, DEFAULT_GAUGES); }
+  function getGauges()        { return { ...DEFAULT_GAUGES, ...(load(KEYS.gauges, null) ?? seed(KEYS.gauges, DEFAULT_GAUGES)) }; }
   function saveGauges(g)      { save(KEYS.gauges, g); }
 
-  function getStreak()        { return load(KEYS.streak, DEFAULT_STREAK); }
+  function getStreak()        { return { ...DEFAULT_STREAK, ...load(KEYS.streak, {}) }; }
   function saveStreak(s)      { save(KEYS.streak, s); }
 
   function getAllDays()       { return load(KEYS.days, {}); }
   function getDay(date = today()) {
     const days = getAllDays();
-    return days[date] ?? newDayRecord(date);
+    return { ...newDayRecord(date), ...(days[date] ?? {}) };
   }
   function saveDay(record) {
     const days = getAllDays();
@@ -147,7 +167,11 @@ const Storage = (() => {
 
   function seed(key, value) { save(key, value); return value; }
 
-  /* ---------- 集計ヘルパー(骨格段階では簡易版) ---------- */
+  function newId(prefix) {
+    return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  /* ---------- 集計 ---------- */
 
   // 1日の獲得合計と内訳を計算
   function dayTotal(record, habits = getHabits(), settings = getSettings()) {
@@ -165,6 +189,100 @@ const Storage = (() => {
       quests, combo, firstTry, lucky, habits: habitTotal, bonus,
       total: quests + combo + firstTry + lucky + habitTotal + bonus,
     };
+  }
+
+  /* ---------- ストリーク(4.10) ----------
+   * 日別レコードから毎回逆算する(状態のズレを防ぐ)。
+   * 「1日1クエスト以上達成」で継続。今日未達成でも昨日までの連続は維持。 */
+
+  function computeStreak() {
+    const days = getAllDays();
+    const questDone = d => (days[d]?.quests ?? []).some(q => q.done);
+    let cursor = today();
+    if (!questDone(cursor)) cursor = addDays(cursor, -1); // 今日はまだ猶予
+    let count = 0;
+    while (questDone(cursor)) {
+      count++;
+      cursor = addDays(cursor, -1);
+    }
+    return count;
+  }
+
+  // ストリークを再計算し、ベスト更新も保存して返す
+  function streakInfo() {
+    const s = getStreak();
+    s.current = computeStreak();
+    if (s.current > s.best) s.best = s.current;
+    saveStreak(s);
+    return s;
+  }
+
+  // 今日のボーナスを再計算して日別レコードに反映(クエスト達成状況が変わるたびに呼ぶ)
+  // ストリークが 7 / 30 にちょうど到達した日に加算される
+  function refreshBonus(record, settings = getSettings()) {
+    const doneToday = record.quests.some(q => q.done);
+    const streak = computeStreak();
+    record.bonus = (doneToday && settings.streakBonus[streak]) ? settings.streakBonus[streak] : 0;
+    return record;
+  }
+
+  /* ---------- ゲージ配分(4.11) ---------- */
+
+  // 週替わり・月替わりのリセット処理
+  function rolloverGauges() {
+    const g = getGauges();
+    const wk = weekStart(today());
+    const mo = today().slice(0, 7);
+    let changed = false;
+    if (g.week !== wk) {
+      g.week = wk;
+      g.allocations.filter(a => a.type === 'weekly').forEach(a => { g.balances[a.id] = 0; });
+      changed = true;
+    }
+    if (g.month !== mo) {
+      g.month = mo;
+      g.allocations.filter(a => a.type === 'monthly').forEach(a => { g.balances[a.id] = 0; });
+      g.monthAllocated = {};
+      changed = true;
+    }
+    if (changed) saveGauges(g);
+    return g;
+  }
+
+  /* 獲得額を優先順位順(allocations の並び順)に配分する。
+   * - weekly: 週次目標まで(週が変わるとゲージリセット)
+   * - monthly: 月額まで(月が変わるとゲージリセット)
+   * - pool: 残高は累積、ただし月の配分は月額まで
+   * 全枠が埋まった超過分は殿堂ゴール先頭へ自動積立。
+   * 戻り値: { entries: [{name, amount}], overflow } */
+  function allocate(amount) {
+    const g = rolloverGauges();
+    let rest = amount;
+    const entries = [];
+    for (const a of g.allocations) {
+      if (rest <= 0) break;
+      const balance = g.balances[a.id] ?? 0;
+      const allocatedThisMonth = g.monthAllocated[a.id] ?? 0;
+      const room = a.type === 'weekly'
+        ? Math.max(0, a.weeklyTarget - balance)
+        : Math.max(0, a.monthly - allocatedThisMonth);
+      const take = Math.min(rest, room);
+      if (take > 0) {
+        g.balances[a.id] = balance + take;
+        g.monthAllocated[a.id] = allocatedThisMonth + take;
+        entries.push({ name: a.name, amount: take });
+        rest -= take;
+      }
+    }
+    let overflow = 0;
+    if (rest > 0 && g.hallOfFame.length > 0) {
+      g.hallOfFame[0].pool += rest;
+      overflow = rest;
+      entries.push({ name: g.hallOfFame[0].name + '(殿堂積立)', amount: rest });
+      rest = 0;
+    }
+    saveGauges(g);
+    return { entries, overflow };
   }
 
   /* ---------- バックアップ(2章: 書き出し/復元) ---------- */
@@ -185,14 +303,15 @@ const Storage = (() => {
   }
 
   return {
-    KEYS, today, newDayRecord,
+    KEYS, today, addDays, weekStart, newDayRecord, newId,
     getSettings, saveSettings,
     getProjects, saveProjects,
     getHabits, saveHabits,
     getGauges, saveGauges,
     getStreak, saveStreak,
     getAllDays, getDay, saveDay,
-    dayTotal,
+    dayTotal, computeStreak, streakInfo, refreshBonus,
+    rolloverGauges, allocate,
     exportAll, importAll,
   };
 })();
