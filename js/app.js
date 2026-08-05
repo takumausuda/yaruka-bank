@@ -128,7 +128,7 @@ const App = (() => {
     // クエスト一覧
     const list = $('#quest-list');
     if (day.quests.length === 0) {
-      list.innerHTML = `<li class="empty-state">クエストがありません。<br>「+ 手動でクエスト追加」から作成<br><small>(AI自動生成は手順3で実装予定)</small></li>`;
+      list.innerHTML = `<li class="empty-state">クエストがありません。<br>「✨ 生成」でAIが今日のクエストを提案します<br><small>(「+ 手動でクエスト追加」もOK)</small></li>`;
     } else {
       const projects = Storage.getProjects();
       list.innerHTML = day.quests.map(q => {
@@ -155,7 +155,7 @@ const App = (() => {
     const ft = day.firstTry;
     $('#first-try-body').innerHTML = ft.done
       ? `✓ ${escapeHtml(ft.custom || ft.hint || '初トライ')} <span class="mini-amount">+${yen(ft.amount)}円</span>`
-      : (ft.hint ? `ヒント: ${escapeHtml(ft.hint)} — タップで計上` : 'タップで今日の初トライを記録(AIヒントは手順3)');
+      : (ft.hint ? `ヒント: ${escapeHtml(ft.hint)} — タップで計上` : 'タップで記録(「✨ 生成」でAIヒントが届きます)');
     $('#first-try-card').classList.toggle('done-card', ft.done);
 
     // ラッキーポスチャー
