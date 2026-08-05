@@ -399,6 +399,7 @@ const App = (() => {
     const day = Storage.getDay();
     if (day.firstTry.done) return;
     const amounts = [100, 200, 300, 500];
+    const defaultAmount = amounts.includes(day.firstTry.amount) ? day.firstTry.amount : 300;
     openModal(`
       <h2 class="modal-title">🚀 初トライを計上</h2>
       <div class="modal-label">何に初トライした?</div>
@@ -406,7 +407,7 @@ const App = (() => {
              value="${escapeHtml(day.firstTry.hint)}">
       <div class="modal-label">金額</div>
       <div class="seg-group seg-amount">
-        ${amounts.map((a, i) => `<button type="button" class="seg-btn ${i === 2 ? 'active' : ''}" data-value="${a}">${a}円</button>`).join('')}
+        ${amounts.map(a => `<button type="button" class="seg-btn ${a === defaultAmount ? 'active' : ''}" data-value="${a}">${a}円</button>`).join('')}
       </div>
       <button class="btn btn-primary" id="btn-first-try-save">計上する</button>
       <button class="btn" id="btn-modal-cancel">キャンセル</button>
@@ -538,6 +539,49 @@ const App = (() => {
     $('#btn-modal-cancel').addEventListener('click', closeModal);
   }
 
+  /* ==================== AIクエスト生成(4.2 / 4.6) ==================== */
+
+  async function generateQuests() {
+    const settings = Storage.getSettings();
+    if (!settings.apiKey) {
+      alert('AI生成には Anthropic APIキーが必要です。\n設定タブで登録してください(手動クエスト追加はキーなしで使えます)');
+      return;
+    }
+
+    const day = Storage.getDay();
+    // 完了済み・手動追加のクエストは残し、未完了のAI生成分だけを差し替える
+    const keep = day.quests.filter(q => q.done || q.manual);
+    if (day.quests.length > keep.length || day.quests.some(q => !q.manual)) {
+      if (day.quests.some(q => !q.manual) && !confirm('生成済みの未完了クエストを差し替えます。よろしいですか?')) return;
+    }
+
+    const btn = $('#btn-generate-quests');
+    btn.disabled = true;
+    btn.textContent = '生成中…';
+    try {
+      const result = await AI.generateQuests();
+      const dayNow = Storage.getDay();
+      dayNow.quests = [...dayNow.quests.filter(q => q.done || q.manual), ...result.quests];
+      // 初トライヒント: まだ計上していなければ反映
+      if (!dayNow.firstTry.done) {
+        dayNow.firstTry.hint = result.firstTry.hint;
+        dayNow.firstTry.amount = result.firstTry.amount;
+      }
+      Storage.saveDay(dayNow);
+      render();
+    } catch (e) {
+      if (e.message === 'NO_API_KEY') {
+        alert('AI生成には Anthropic APIキーが必要です。設定タブで登録してください');
+      } else {
+        alert(e.message);
+      }
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '✨ 生成';
+      render();
+    }
+  }
+
   /* ==================== 夜の締め(4.12) ==================== */
 
   function closeDay(ev) {
@@ -567,8 +611,7 @@ const App = (() => {
       }
     });
     $('#btn-add-quest').addEventListener('click', () => openQuestModal());
-    $('#btn-generate-quests').addEventListener('click', () =>
-      alert('AIクエスト生成は手順3で実装します。今は「+ 手動でクエスト追加」をご利用ください'));
+    $('#btn-generate-quests').addEventListener('click', generateQuests);
 
     // --- ホーム: コンボ・初トライ・ラッキー ---
     $('#btn-morning-combo').addEventListener('click', e => toggleCombo('morningCombo', e));
