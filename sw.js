@@ -1,7 +1,8 @@
 /* やる価バンク 2.0 — Service Worker(オフライン対応)
- * キャッシュファースト戦略。アプリ更新時は CACHE_VERSION を上げる。 */
+ * ネットワークファースト戦略: オンライン時は常に最新を取得してキャッシュを更新し、
+ * オフライン時のみキャッシュから返す(更新の反映遅れを防ぐ)。 */
 
-const CACHE_VERSION = 'yaruka-v4';
+const CACHE_VERSION = 'yaruka-v5';
 const ASSETS = [
   './',
   './index.html',
@@ -30,19 +31,23 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-  // Anthropic API 呼び出しはキャッシュしない(手順3で使用)
+  // Anthropic API 呼び出しはキャッシュしない
   if (event.request.url.includes('api.anthropic.com')) return;
+  if (event.request.method !== 'GET') return;
 
   event.respondWith(
-    caches.match(event.request).then(cached =>
-      cached || fetch(event.request).then(res => {
-        // 同一オリジンの GET のみキャッシュに追加
-        if (event.request.method === 'GET' && res.ok && new URL(event.request.url).origin === location.origin) {
-          const clone = res.clone();
-          caches.open(CACHE_VERSION).then(cache => cache.put(event.request, clone));
-        }
-        return res;
-      })
+    fetch(event.request).then(res => {
+      // オンライン: 最新を返しつつ、同一オリジンのものはキャッシュを更新
+      if (res.ok && new URL(event.request.url).origin === location.origin) {
+        const clone = res.clone();
+        caches.open(CACHE_VERSION).then(cache => cache.put(event.request, clone));
+      }
+      return res;
+    }).catch(() =>
+      // オフライン: キャッシュから返す(ページ遷移は index.html にフォールバック)
+      caches.match(event.request).then(cached =>
+        cached || (event.request.mode === 'navigate' ? caches.match('./index.html') : Response.error())
+      )
     )
   );
 });
