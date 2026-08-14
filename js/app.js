@@ -119,12 +119,42 @@ const App = (() => {
     $('#today-total').textContent = yen(totals.total);
 
     // メインゲージ: 週末軍資金まであと〇〇円(最重要UI)
+    // 達成後は次のターゲットを指し、常に「タップで動く目標」が見えるようにする
     const gauges = Storage.rolloverGauges();
     const main = gauges.allocations.find(a => a.main);
     const balance = gauges.balances[main.id] ?? 0;
     const remaining = Math.max(0, main.weeklyTarget - balance);
-    $('#gauge-remaining').textContent = yen(remaining);
-    $('#gauge-fill').style.width = Math.min(100, (balance / main.weeklyTarget) * 100) + '%';
+    const gaugeEl = $('#main-gauge');
+    if (remaining > 0) {
+      gaugeEl.innerHTML = `
+        <div class="gauge-title">週末軍資金まであと <strong>${yen(remaining)}</strong> 円</div>
+        <div class="gauge-bar"><div class="gauge-fill" style="width:${Math.min(100, (balance / main.weeklyTarget) * 100)}%"></div></div>`;
+    } else {
+      // 次に埋めるゲージ(=いま配分が流れている先)を探す
+      const next = gauges.allocations.find(a => {
+        if (a.main) return false;
+        const room = a.type === 'weekly'
+          ? a.weeklyTarget - (gauges.balances[a.id] ?? 0)
+          : a.monthly - (gauges.monthAllocated[a.id] ?? 0);
+        return room > 0;
+      });
+      if (next) {
+        const nextRoom = next.type === 'weekly'
+          ? next.weeklyTarget - (gauges.balances[next.id] ?? 0)
+          : next.monthly - (gauges.monthAllocated[next.id] ?? 0);
+        const nextTarget = next.type === 'weekly' ? next.weeklyTarget : next.monthly;
+        gaugeEl.innerHTML = `
+          <div class="gauge-title">🎉 週末軍資金 <strong>${yen(main.weeklyTarget)}円</strong> 達成!今週末は家族と最高の時間を!</div>
+          <div class="gauge-next">🎯 次のターゲット「${escapeHtml(next.name)}」まで あと<strong>${yen(nextRoom)}</strong>円</div>
+          <div class="gauge-bar"><div class="gauge-fill" style="width:${Math.min(100, ((nextTarget - nextRoom) / nextTarget) * 100)}%"></div></div>`;
+      } else {
+        const hof = gauges.hallOfFame[0];
+        gaugeEl.innerHTML = `
+          <div class="gauge-title">👑 全ゲージ制覇!伝説の稼ぎ手だ!</div>
+          <div class="gauge-next">ここからの獲得は${hof ? `「${escapeHtml(hof.name)}」へ殿堂積立 — ` : ''}稼ぐほど夢が近づく!</div>
+          <div class="gauge-bar"><div class="gauge-fill" style="width:100%"></div></div>`;
+      }
+    }
 
     // クエスト一覧
     const list = $('#quest-list');
@@ -256,7 +286,9 @@ const App = (() => {
     const gauges = Storage.rolloverGauges();
     const main = gauges.allocations.find(a => a.main);
     const remaining = Math.max(0, main.weeklyTarget - (gauges.balances[main.id] ?? 0));
-    $('#close-gauges-card').innerHTML = `🎁 週末軍資金まであと <strong>${yen(remaining)}円</strong>`;
+    $('#close-gauges-card').innerHTML = remaining > 0
+      ? `🎁 週末軍資金まであと <strong>${yen(remaining)}円</strong>`
+      : `🎉 週末軍資金 <strong>達成!</strong>今週末は思いきり楽しもう!`;
 
     // 本日ここまでの配分先内訳(タップのたびに更新される)
     const allocCard = $('#close-alloc-card');
