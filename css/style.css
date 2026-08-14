@@ -406,6 +406,7 @@ select.text-input { appearance: none; -webkit-appearance: none; }
   pointer-events: none;
   animation: float-up 0.9s ease-out forwards;
 }
+.float-reward.minus { color: var(--danger); }
 @keyframes float-up {
   0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
   15%  { opacity: 1; transform: translate(-50%, -60%) scale(1.15); }

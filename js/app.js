@@ -37,18 +37,19 @@ const App = (() => {
     } catch { /* 音が出せない環境では無視 */ }
   }
 
-  // タップ位置から「+〇〇円」が浮き上がる演出
+  // タップ位置から「+〇〇円」が浮き上がる演出(取り消し時はマイナス表示)
   function rewardEffect(amount, ev) {
+    const minus = amount < 0;
     const el = document.createElement('div');
-    el.className = 'float-reward';
-    el.textContent = `+${yen(amount)}円`;
+    el.className = 'float-reward' + (minus ? ' minus' : '');
+    el.textContent = `${minus ? '−' : '+'}${yen(Math.abs(amount))}円`;
     const x = ev?.clientX ?? window.innerWidth / 2;
     const y = ev?.clientY ?? window.innerHeight / 2;
     el.style.left = x + 'px';
     el.style.top = y + 'px';
     document.body.appendChild(el);
     el.addEventListener('animationend', () => el.remove());
-    playCoin();
+    if (!minus) playCoin();
   }
 
   /* ==================== モーダル ==================== */
@@ -235,10 +236,14 @@ const App = (() => {
       ['ボーナス', totals.bonus],
     ].map(([label, v]) => `<li><span>${label}</span><span>${yen(v)}円</span></li>`).join('');
 
-    $('#piggy-amount').textContent = yen(day.closed ? day.allocatedTotal : totals.total);
+    // 実物の貯金箱へまだ入れていない分(確認後に稼いだ分もここに出る)
+    const pending = totals.total - (day.allocatedTotal ?? 0);
+    $('#piggy-message').innerHTML = pending > 0
+      ? `🐷 貯金箱に <strong>${yen(pending)}</strong> 円入れてください`
+      : `🐷 本日分 <strong>${yen(day.allocatedTotal ?? 0)}</strong> 円は投入済みです`;
     const btn = $('#btn-piggy-done');
-    btn.textContent = day.closed ? '✓ 確認済み' : '貯金箱に入れた!';
-    btn.disabled = day.closed;
+    btn.textContent = pending > 0 ? '貯金箱に入れた!' : '✓ 確認済み';
+    btn.disabled = pending <= 0;
 
     // ストリークと次のボーナス
     const bonusDays = Object.keys(settings.streakBonus).map(Number).sort((a, b) => a - b);
@@ -253,12 +258,13 @@ const App = (() => {
     const remaining = Math.max(0, main.weeklyTarget - (gauges.balances[main.id] ?? 0));
     $('#close-gauges-card').innerHTML = `🎁 週末軍資金まであと <strong>${yen(remaining)}円</strong>`;
 
-    // 配分結果の表示(締め済みの場合)
+    // 本日ここまでの配分先内訳(タップのたびに更新される)
     const allocCard = $('#close-alloc-card');
-    if (day.closed && day.allocResult?.length) {
+    const allocEntries = Object.entries(day.allocMap ?? {});
+    if (allocEntries.length) {
       allocCard.classList.remove('hidden');
       allocCard.innerHTML = `<div class="card-title">本日の配分</div>` +
-        day.allocResult.map(e => `<div class="alloc-row"><span>${escapeHtml(e.name)}</span><span>+${yen(e.amount)}円</span></div>`).join('');
+        allocEntries.map(([name, amount]) => `<div class="alloc-row"><span>${escapeHtml(name)}</span><span>+${yen(amount)}円</span></div>`).join('');
     } else {
       allocCard.classList.add('hidden');
     }
@@ -279,26 +285,31 @@ const App = (() => {
 
   /* ==================== 計上アクション(1タップ) ==================== */
 
+  /* 報酬に関わる変更を確定する(4.4 即時報酬)。
+   * ボーナス再計算 → ゲージへ即時配分 → 保存、の順に必ず通すことで、
+   * 計上・取り消し・編集・削除のどれを経ても獲得額と貯金額がズレない。 */
+  function commitDay(day, ev) {
+    Storage.refreshBonus(day);
+    const { delta } = Storage.syncBanking(day);
+    Storage.saveDay(day);
+    if (delta !== 0) rewardEffect(delta, ev);
+    render();
+  }
+
   // クエスト完了トグル
   function toggleQuest(questId, ev) {
     const day = Storage.getDay();
     const q = day.quests.find(x => x.id === questId);
     if (!q) return;
     q.done = !q.done;
-    Storage.refreshBonus(day);
-    Storage.saveDay(day);
-    if (q.done) rewardEffect(q.amount, ev);
-    render();
+    commitDay(day, ev);
   }
 
   // コンボトグル
   function toggleCombo(key, ev) {
     const day = Storage.getDay();
-    const settings = Storage.getSettings();
     day[key] = !day[key];
-    Storage.saveDay(day);
-    if (day[key]) rewardEffect(key === 'morningCombo' ? settings.morningCombo : settings.nightCombo, ev);
-    render();
+    commitDay(day, ev);
   }
 
   // 習慣カウンター
@@ -310,9 +321,7 @@ const App = (() => {
     const next = Math.max(0, current + delta);
     if (next === current) return;
     day.habitCounts[habitId] = next;
-    Storage.saveDay(day);
-    if (delta > 0) rewardEffect(habit.price, ev);
-    render();
+    commitDay(day, ev);
   }
 
   /* ==================== モーダル各種 ==================== */
@@ -358,7 +367,7 @@ const App = (() => {
     card.addEventListener('segchange', updateAmount);
     updateAmount();
 
-    $('#btn-quest-save').addEventListener('click', () => {
+    $('#btn-quest-save').addEventListener('click', ev => {
       const title = $('#quest-title-input').value.trim();
       if (!title) { alert('内容を入力してください'); return; }
       const d = segValue(card.querySelector('.seg-diff'));
@@ -375,20 +384,16 @@ const App = (() => {
           difficulty: d, impact: im, amount, done: false, manual: true,
         });
       }
-      Storage.refreshBonus(dayNow);
-      Storage.saveDay(dayNow);
       closeModal();
-      render();
+      commitDay(dayNow, ev);   // 完了済みクエストの金額変更もゲージへ即反映
     });
 
-    $('#btn-quest-delete')?.addEventListener('click', () => {
+    $('#btn-quest-delete')?.addEventListener('click', ev => {
       if (!confirm('このクエストを削除しますか?')) return;
       const dayNow = Storage.getDay();
       dayNow.quests = dayNow.quests.filter(q => q.id !== questId);
-      Storage.refreshBonus(dayNow);
-      Storage.saveDay(dayNow);
       closeModal();
-      render();
+      commitDay(dayNow, ev);
     });
 
     $('#btn-modal-cancel').addEventListener('click', closeModal);
@@ -420,10 +425,8 @@ const App = (() => {
       const amount = segValue(card.querySelector('.seg-amount')) || 300;
       const dayNow = Storage.getDay();
       dayNow.firstTry = { ...dayNow.firstTry, custom: text, amount, done: true };
-      Storage.saveDay(dayNow);
       closeModal();
-      rewardEffect(amount, ev);
-      render();
+      commitDay(dayNow, ev);
     });
     $('#btn-modal-cancel').addEventListener('click', closeModal);
   }
@@ -445,10 +448,8 @@ const App = (() => {
       if (!note) { alert('一言だけ記録してください'); return; }
       const dayNow = Storage.getDay();
       dayNow.lucky = { note, done: true };
-      Storage.saveDay(dayNow);
       closeModal();
-      rewardEffect(settings.luckyReward, ev);
-      render();
+      commitDay(dayNow, ev);
     });
     $('#btn-modal-cancel').addEventListener('click', closeModal);
   }
@@ -469,7 +470,7 @@ const App = (() => {
       ${editing ? '<button class="btn btn-danger" id="btn-habit-delete">削除</button>' : ''}
       <button class="btn" id="btn-modal-cancel">キャンセル</button>
     `);
-    $('#btn-habit-save').addEventListener('click', () => {
+    $('#btn-habit-save').addEventListener('click', ev => {
       const name = $('#habit-name-input').value.trim();
       const unit = $('#habit-unit-input').value.trim();
       const price = Number($('#habit-price-input').value);
@@ -482,13 +483,13 @@ const App = (() => {
       }
       Storage.saveHabits(list);
       closeModal();
-      render();
+      commitDay(Storage.getDay(), ev);   // 単価変更で本日の獲得額が変わるため貯金も合わせる
     });
-    $('#btn-habit-delete')?.addEventListener('click', () => {
+    $('#btn-habit-delete')?.addEventListener('click', ev => {
       if (!confirm('この習慣を削除しますか?(記録済みのカウントは残ります)')) return;
       Storage.saveHabits(Storage.getHabits().filter(h => h.id !== habitId));
       closeModal();
-      render();
+      commitDay(Storage.getDay(), ev);
     });
     $('#btn-modal-cancel').addEventListener('click', closeModal);
   }
@@ -567,8 +568,7 @@ const App = (() => {
         dayNow.firstTry.hint = result.firstTry.hint;
         dayNow.firstTry.amount = result.firstTry.amount;
       }
-      Storage.saveDay(dayNow);
-      render();
+      commitDay(dayNow);
     } catch (e) {
       if (e.message === 'NO_API_KEY') {
         alert('AI生成には Anthropic APIキーが必要です。設定タブで登録してください');
@@ -584,16 +584,16 @@ const App = (() => {
 
   /* ==================== 夜の締め(4.12) ==================== */
 
-  function closeDay(ev) {
+  /* 実物の貯金箱へ現金を入れたことの確認。
+   * アプリ内のゲージ配分はタップ時点で済んでいるので、ここでは配分を行わない。
+   * 確認後にさらに稼いだ分は未投入として再び案内する。 */
+  function closeDay() {
     const day = Storage.getDay();
-    if (day.closed) return;
     const totals = Storage.dayTotal(day);
-    const result = Storage.allocate(totals.total); // ゲージへ自動配分
+    if (totals.total <= (day.allocatedTotal ?? 0)) return;
     day.closed = true;
     day.allocatedTotal = totals.total;
-    day.allocResult = result.entries;
     Storage.saveDay(day);
-    rewardEffect(totals.total, ev);
     render();
   }
 
@@ -709,6 +709,11 @@ const App = (() => {
   function init() {
     initTabs();
     initEvents();
+    // 起動時にも今日の獲得額とゲージのズレを解消する
+    // (即時貯金の導入前に稼いだ分・日付をまたいだ場合の取りこぼしを防ぐ)
+    const day = Storage.getDay();
+    Storage.refreshBonus(day);
+    if (Storage.syncBanking(day).delta !== 0) Storage.saveDay(day);
     render();
   }
 

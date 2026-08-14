@@ -94,8 +94,10 @@ const Storage = (() => {
       lucky: { note: '', done: false },                            // ラッキーポスチャー記録
       habitCounts: {},   // { habitId: 回数 }
       bonus: 0,          // ストリークボーナス(到達日に自動加算)
-      closed: false,     // 夜の締め「貯金箱に入れた」確認済み
-      allocatedTotal: 0, // 締め時にゲージへ配分した額
+      bankedTotal: 0,    // 即時貯金でゲージへ配分済みの額(その日の獲得額と一致させる)
+      allocMap: {},      // 配分先ごとの本日の累計 { 配分先名: 円 }
+      closed: false,     // 実物の貯金箱に現金を入れた確認済み
+      allocatedTotal: 0, // 現金を貯金箱に入れたと確認した額
     };
   }
 
@@ -157,7 +159,17 @@ const Storage = (() => {
   function getAllDays()       { return load(KEYS.days, {}); }
   function getDay(date = today()) {
     const days = getAllDays();
-    return { ...newDayRecord(date), ...(days[date] ?? {}) };
+    const stored = days[date] ?? {};
+    const record = { ...newDayRecord(date), ...stored };
+    // 旧データ(締め時に一括配分していた頃)の移行:
+    // 締め済みの日はその額がすでにゲージへ入っているので配分済みとして扱う
+    if (stored.bankedTotal === undefined) {
+      record.bankedTotal = stored.closed ? (stored.allocatedTotal ?? 0) : 0;
+    }
+    if (stored.allocMap === undefined && Array.isArray(stored.allocResult)) {
+      record.allocMap = Object.fromEntries(stored.allocResult.map(e => [e.name, e.amount]));
+    }
+    return record;
   }
   function saveDay(record) {
     const days = getAllDays();
@@ -285,6 +297,64 @@ const Storage = (() => {
     return { entries, overflow };
   }
 
+  /* 配分を巻き戻す(クエストの完了取り消し・削除・減額に対応)。
+   * allocate と逆の順序(最後に入った殿堂積立 → 優先順位の低い枠へ)で差し戻す。
+   * 週替わり・月替わりでゲージがリセットされていた場合は、残っている分までしか戻せない。
+   * 戻り値: { entries: [{name, amount}] }(amount は戻した額、正の数) */
+  function unallocate(amount) {
+    const g = rolloverGauges();
+    let rest = amount;
+    const entries = [];
+
+    if (rest > 0 && g.hallOfFame.length > 0) {
+      const take = Math.min(rest, g.hallOfFame[0].pool);
+      if (take > 0) {
+        g.hallOfFame[0].pool -= take;
+        entries.push({ name: g.hallOfFame[0].name + '(殿堂積立)', amount: take });
+        rest -= take;
+      }
+    }
+
+    for (let i = g.allocations.length - 1; i >= 0 && rest > 0; i--) {
+      const a = g.allocations[i];
+      const balance = g.balances[a.id] ?? 0;
+      const allocatedThisMonth = g.monthAllocated[a.id] ?? 0;
+      // 残高と今月の配分実績の両方から引ける分までを戻す
+      const take = Math.min(rest, balance, allocatedThisMonth);
+      if (take > 0) {
+        g.balances[a.id] = balance - take;
+        g.monthAllocated[a.id] = allocatedThisMonth - take;
+        entries.push({ name: a.name, amount: take });
+        rest -= take;
+      }
+    }
+
+    saveGauges(g);
+    return { entries };
+  }
+
+  /* その日の獲得額とゲージへ配分済みの額のズレを解消する(即時貯金の中核)。
+   * 増えた分はゲージへ配分し、減った分は差し戻すので、
+   * 1タップ計上・取り消し・編集・削除のどれでも残高が必ず一致する。
+   * 戻り値: { delta }(プラス=貯金した額 / マイナス=戻した額) */
+  function syncBanking(record) {
+    const total = dayTotal(record).total;
+    const banked = record.bankedTotal ?? 0;
+    const delta = total - banked;
+    if (delta === 0) return { delta: 0 };
+
+    const { entries } = delta > 0 ? allocate(delta) : unallocate(-delta);
+    const sign = delta > 0 ? 1 : -1;
+    const map = { ...(record.allocMap ?? {}) };
+    for (const e of entries) {
+      map[e.name] = (map[e.name] ?? 0) + sign * e.amount;
+      if (map[e.name] <= 0) delete map[e.name];
+    }
+    record.allocMap = map;
+    record.bankedTotal = total;
+    return { delta };
+  }
+
   /* ---------- バックアップ(2章: 書き出し/復元) ---------- */
 
   function exportAll() {
@@ -311,7 +381,7 @@ const Storage = (() => {
     getStreak, saveStreak,
     getAllDays, getDay, saveDay,
     dayTotal, computeStreak, streakInfo, refreshBonus,
-    rolloverGauges, allocate,
+    rolloverGauges, allocate, unallocate, syncBanking,
     exportAll, importAll,
   };
 })();

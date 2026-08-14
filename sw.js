@@ -2,7 +2,7 @@
  * ネットワークファースト戦略: オンライン時は常に最新を取得してキャッシュを更新し、
  * オフライン時のみキャッシュから返す(更新の反映遅れを防ぐ)。 */
 
-const CACHE_VERSION = 'yaruka-v5';
+const CACHE_VERSION = 'yaruka-v6';
 const ASSETS = [
   './',
   './index.html',
