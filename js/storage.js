@@ -177,6 +177,30 @@ const Storage = (() => {
     save(KEYS.days, days);
   }
 
+  /* 前日までの未完了クエストを今日へ持ち越す。
+   * 過去の日別レコードから未完了クエストを取り除き、carried 印を付けて今日へ移す。
+   * 移動後の過去レコードには未完了が残らないため、何度呼んでも二重には持ち越されない
+   * (render のたびに呼んでよい)。未完了は金額に影響しないので貯金・ストリークは動かない。 */
+  function rolloverQuests() {
+    const days = getAllDays();
+    const t = today();
+    const moved = [];
+    for (const [date, rec] of Object.entries(days)) {
+      if (date >= t) continue;
+      const unfinished = (rec.quests ?? []).filter(q => !q.done);
+      if (unfinished.length === 0) continue;
+      rec.quests = rec.quests.filter(q => q.done);
+      moved.push(...unfinished.map(q => ({ ...q, carried: true })));
+    }
+    if (moved.length === 0) return false;
+    // 今日のレコード(旧データ移行込み)に追加し、過去の変更ごと1回で保存する
+    const todayRec = getDay(t);
+    todayRec.quests = [...todayRec.quests, ...moved];
+    days[t] = todayRec;
+    save(KEYS.days, days);
+    return true;
+  }
+
   function seed(key, value) { save(key, value); return value; }
 
   function newId(prefix) {
@@ -379,7 +403,7 @@ const Storage = (() => {
     getHabits, saveHabits,
     getGauges, saveGauges,
     getStreak, saveStreak,
-    getAllDays, getDay, saveDay,
+    getAllDays, getDay, saveDay, rolloverQuests,
     dayTotal, computeStreak, streakInfo, refreshBonus,
     rolloverGauges, allocate, unallocate, syncBanking,
     exportAll, importAll,

@@ -191,6 +191,7 @@ body {
 .quest-body { flex: 1; min-width: 0; }
 .quest-title { font-size: 15px; font-weight: 600; }
 .quest-project { font-size: 12px; color: var(--text-dim); }
+.quest-carried { font-size: 11px; color: var(--accent); font-weight: 700; }
 .quest-amount { font-size: 16px; font-weight: 800; color: var(--accent); flex-shrink: 0; }
 
 /* コンボ */

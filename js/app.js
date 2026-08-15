@@ -101,6 +101,8 @@ const App = (() => {
   /* ==================== レンダリング ==================== */
 
   function render() {
+    // 日付が変わっていたら、前日までの未完了クエストを今日へ持ち越してから描画する
+    Storage.rolloverQuests();
     renderHome();
     renderHabits();
     renderGauges();
@@ -169,6 +171,7 @@ const App = (() => {
             <button class="quest-check" aria-label="完了">${q.done ? '✓' : ''}</button>
             <div class="quest-body">
               <div class="quest-title">${escapeHtml(q.title)}</div>
+              ${q.carried ? '<div class="quest-carried">⏪ 持ち越し</div>' : ''}
               ${pj ? `<div class="quest-project">${escapeHtml(pj.name)}</div>` : ''}
             </div>
             <div class="quest-amount">${yen(q.amount)}円</div>
@@ -582,11 +585,9 @@ const App = (() => {
     }
 
     const day = Storage.getDay();
-    // 完了済み・手動追加のクエストは残し、未完了のAI生成分だけを差し替える
-    const keep = day.quests.filter(q => q.done || q.manual);
-    if (day.quests.length > keep.length || day.quests.some(q => !q.manual)) {
-      if (day.quests.some(q => !q.manual) && !confirm('生成済みの未完了クエストを差し替えます。よろしいですか?')) return;
-    }
+    // 完了済み・手動追加・持ち越しのクエストは残し、今日生成した未完了分だけを差し替える
+    const replaceable = day.quests.filter(q => !q.done && !q.manual && !q.carried);
+    if (replaceable.length > 0 && !confirm('生成済みの未完了クエストを差し替えます。よろしいですか?')) return;
 
     const btn = $('#btn-generate-quests');
     btn.disabled = true;
@@ -594,7 +595,7 @@ const App = (() => {
     try {
       const result = await AI.generateQuests();
       const dayNow = Storage.getDay();
-      dayNow.quests = [...dayNow.quests.filter(q => q.done || q.manual), ...result.quests];
+      dayNow.quests = [...dayNow.quests.filter(q => q.done || q.manual || q.carried), ...result.quests];
       // 初トライヒント: まだ計上していなければ反映
       if (!dayNow.firstTry.done) {
         dayNow.firstTry.hint = result.firstTry.hint;

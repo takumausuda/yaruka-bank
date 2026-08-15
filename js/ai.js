@@ -61,11 +61,17 @@ const AI = (() => {
       row.map((v, i) => `難易度${DIFF_LABELS[d]}×インパクト${IMPACT_LABELS[i]}=${v}円`).join(', ')
     ).join('\n');
 
+    // 持ち越し分など、今日すでにあるクエストと重複した提案を避ける
+    const existing = Storage.getDay().quests;
+    const existingBlock = existing.length
+      ? `\n今日すでに登録済みのクエスト(これらと内容が重複しないこと):\n${existing.map(q => '- ' + q.title).join('\n')}\n`
+      : '';
+
     return `あなたは個人の仕事タスク管理を手伝うコーチです。今日は${today}です。
 
 登録プロジェクト:
 ${projectLines}
-
+${existingBlock}
 以下を生成してください。
 
 1. quests: 今日のクエストをちょうど3つ。
