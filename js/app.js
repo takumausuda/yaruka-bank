@@ -108,6 +108,7 @@ const App = (() => {
     renderGauges();
     renderProjects();
     renderClose();
+    renderSavingsHistory();
     renderSettings();
   }
 
@@ -306,6 +307,71 @@ const App = (() => {
 
     // 日曜夜はバックアップリマインド
     $('#backup-reminder').classList.toggle('hidden', new Date().getDay() !== 0);
+  }
+
+  /* 📅 貯金履歴: 日ごとの獲得額を月別にまとめて表示。
+   * 記録のない日も0円として並べ、サボりも含めて正直に振り返れるようにする。
+   * リストが長くなるため、締め画面を表示しているときだけ描画する。 */
+  function renderSavingsHistory() {
+    if (!$('#screen-close').classList.contains('active')) return;
+    const days = Storage.getAllDays();
+    const habits = Storage.getHabits();
+    const settings = Storage.getSettings();
+    const t = Storage.today();
+    const recorded = Object.keys(days).filter(d => d <= t).sort();
+
+    if (recorded.length === 0) {
+      $('#history-summary').innerHTML =
+        '<div class="history-sub">まだ記録がありません。今日の1タップから歴史が始まります!</div>';
+      $('#history-list').innerHTML = '';
+      return;
+    }
+
+    // 最初の記録日から今日までの日別合計(記録なし=0円)
+    const totals = [];
+    for (let d = recorded[0]; d <= t; d = Storage.addDays(d, 1)) {
+      totals.push([d, days[d] ? Storage.dayTotal(days[d], habits, settings).total : 0]);
+    }
+
+    // サマリ: 累計・今週(月曜起点)・今月
+    const ws = Storage.weekStart(t);
+    const ms = t.slice(0, 7);
+    let all = 0, week = 0, month = 0;
+    for (const [d, v] of totals) {
+      all += v;
+      if (d >= ws) week += v;
+      if (d.slice(0, 7) === ms) month += v;
+    }
+    $('#history-summary').innerHTML = `
+      <div class="history-total-label">これまでの貯金 累計</div>
+      <div class="history-total">${yen(all)}<span class="yen">円</span></div>
+      <div class="history-sub">今週 ${yen(week)}円 / 今月 ${yen(month)}円</div>`;
+
+    // 月ごとにグループ化して、新しい月・新しい日から表示
+    const WD = ['日', '月', '火', '水', '木', '金', '土'];
+    const byMonth = new Map();
+    for (const [d, v] of totals) {
+      const m = d.slice(0, 7);
+      if (!byMonth.has(m)) byMonth.set(m, []);
+      byMonth.get(m).push([d, v]);
+    }
+    $('#history-list').innerHTML = [...byMonth.entries()].reverse().map(([m, list]) => {
+      const mTotal = list.reduce((s, [, v]) => s + v, 0);
+      const rows = list.slice().reverse().map(([d, v]) => {
+        const dt = new Date(d + 'T00:00:00');
+        return `
+          <div class="history-row ${v === 0 ? 'zero' : ''}">
+            <span class="history-date">${dt.getMonth() + 1}/${dt.getDate()}(${WD[dt.getDay()]})${d === t ? '<span class="history-today">今日</span>' : ''}</span>
+            <span class="history-amount">${yen(v)}円</span>
+          </div>`;
+      }).join('');
+      const [yy, mm] = m.split('-');
+      return `
+        <div class="card history-month">
+          <div class="history-month-header"><span>${yy}年${Number(mm)}月</span><span>合計 ${yen(mTotal)}円</span></div>
+          ${rows}
+        </div>`;
+    }).join('');
   }
 
   function renderSettings() {
