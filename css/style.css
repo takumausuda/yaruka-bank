@@ -190,7 +190,8 @@ body {
 }
 .quest-body { flex: 1; min-width: 0; }
 .quest-title { font-size: 15px; font-weight: 600; }
-.quest-project { font-size: 12px; color: var(--text-dim); }
+/* 目標完了時間: 内容(.quest-title)と同じ大きさ・クリーム色で締め切り効果を出す */
+.quest-target { font-size: 15px; font-weight: 600; color: #ffe9a8; }
 .quest-carried { font-size: 11px; color: var(--accent); font-weight: 700; }
 .quest-amount { font-size: 16px; font-weight: 800; color: var(--accent); flex-shrink: 0; }
 

@@ -164,16 +164,15 @@ const App = (() => {
     if (day.quests.length === 0) {
       list.innerHTML = `<li class="empty-state">クエストがありません。<br>「✨ 生成」でAIが今日のクエストを提案します<br><small>(「+ 手動でクエスト追加」もOK)</small></li>`;
     } else {
-      const projects = Storage.getProjects();
       list.innerHTML = day.quests.map(q => {
-        const pj = projects.find(p => p.id === q.projectId);
+        const targetMin = Number(q.targetMin);   // 復元データ等で数値以外が入っていても無害化
         return `
           <li class="quest-item ${q.done ? 'done' : ''}" data-quest-id="${q.id}">
             <button class="quest-check" aria-label="完了">${q.done ? '✓' : ''}</button>
             <div class="quest-body">
               <div class="quest-title">${escapeHtml(q.title)}</div>
+              ${targetMin > 0 ? `<div class="quest-target">⏱ 目標${Math.min(999, Math.round(targetMin))}分</div>` : ''}
               ${q.carried ? '<div class="quest-carried">⏪ 持ち越し</div>' : ''}
-              ${pj ? `<div class="quest-project">${escapeHtml(pj.name)}</div>` : ''}
             </div>
             <div class="quest-amount">${yen(q.amount)}円</div>
           </li>`;
@@ -431,8 +430,9 @@ const App = (() => {
   function openQuestModal(questId = null) {
     const day = Storage.getDay();
     const settings = Storage.getSettings();
-    const projects = Storage.getProjects();
     const editing = questId ? day.quests.find(q => q.id === questId) : null;
+    // プリフィル値も数値へ強制(復元データ対策。数値以外・0以下は空欄)
+    const editTarget = Number(editing?.targetMin) > 0 ? Math.round(Number(editing.targetMin)) : '';
 
     const segRow = (label, cls, labels, selected) => `
       <div class="modal-label">${label}</div>
@@ -445,11 +445,9 @@ const App = (() => {
       <div class="modal-label">内容</div>
       <input type="text" id="quest-title-input" class="text-input" placeholder="例: スコア画面のモック作成"
              value="${editing ? escapeHtml(editing.title) : ''}">
-      <div class="modal-label">プロジェクト(任意)</div>
-      <select id="quest-project-select" class="text-input">
-        <option value="">なし</option>
-        ${projects.map(p => `<option value="${p.id}" ${editing?.projectId === p.id ? 'selected' : ''}>${escapeHtml(p.name)}</option>`).join('')}
-      </select>
+      <div class="modal-label">目標完了時間(分・任意)</div>
+      <input type="number" id="quest-target-input" class="text-input" inputmode="numeric" min="1" placeholder="例: 30"
+             value="${editTarget}">
       ${segRow('難易度', 'seg-diff', DIFF_LABELS, editing?.difficulty ?? 0)}
       ${segRow('インパクト', 'seg-impact', IMPACT_LABELS, editing?.impact ?? 0)}
       <div class="modal-amount">報酬: <strong id="quest-amount-preview"></strong></div>
@@ -474,14 +472,16 @@ const App = (() => {
       const d = segValue(card.querySelector('.seg-diff'));
       const im = segValue(card.querySelector('.seg-impact'));
       const amount = settings.priceMatrix[d][im];
-      const projectId = $('#quest-project-select').value || null;
+      // 目標完了時間: 分数のみ。空欄・四捨五入で0以下になる値は「目標なし」
+      const targetRaw = Math.round(Number($('#quest-target-input').value));
+      const targetMin = Number.isFinite(targetRaw) && targetRaw > 0 ? Math.min(999, targetRaw) : null;
       const dayNow = Storage.getDay();
       if (editing) {
         const q = dayNow.quests.find(x => x.id === questId);
-        Object.assign(q, { title, projectId, difficulty: d, impact: im, amount });
+        Object.assign(q, { title, targetMin, difficulty: d, impact: im, amount });
       } else {
         dayNow.quests.push({
-          id: Storage.newId('q'), projectId, title,
+          id: Storage.newId('q'), projectId: null, title, targetMin,
           difficulty: d, impact: im, amount, done: false, manual: true,
         });
       }
