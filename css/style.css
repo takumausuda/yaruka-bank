@@ -192,6 +192,29 @@ body {
 .quest-title { font-size: 15px; font-weight: 600; }
 /* 目標完了時間: 内容(.quest-title)と同じ大きさ・クリーム色で締め切り効果を出す */
 .quest-target { font-size: 15px; font-weight: 600; color: #ffe9a8; }
+
+/* 音声入力(クエスト追加モーダル) */
+.input-with-mic { display: flex; gap: 8px; align-items: flex-start; }
+.input-with-mic .text-input { flex: 1; }
+.mic-btn {
+  flex-shrink: 0;
+  width: 46px;
+  height: 46px;
+  border: 1.5px solid var(--bg-card-2);
+  border-radius: 10px;
+  background: var(--bg);
+  font-size: 20px;
+  cursor: pointer;
+}
+.mic-btn.listening {
+  border-color: var(--danger);
+  background: rgba(248, 113, 113, 0.15);
+  animation: mic-pulse 1s ease-in-out infinite;
+}
+@keyframes mic-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.12); }
+}
 .quest-carried { font-size: 11px; color: var(--accent); font-weight: 700; }
 .quest-amount { font-size: 16px; font-weight: 800; color: var(--accent); flex-shrink: 0; }
 

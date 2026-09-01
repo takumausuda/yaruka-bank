@@ -62,8 +62,69 @@ const App = (() => {
   }
 
   function closeModal() {
+    stopSpeech();   // 聞き取り中にモーダルを閉じてもマイクを止める
     $('#modal-root').classList.add('hidden');
     $('#modal-card').innerHTML = '';
+  }
+
+  /* ==================== 音声入力(Web Speech API) ==================== */
+
+  let activeSpeech = null;   // 認識中の SpeechRecognition(1つだけ)
+
+  function stopSpeech() {
+    if (!activeSpeech) return;
+    try { activeSpeech.stop(); } catch { /* 停止済みなら何もしない */ }
+    activeSpeech = null;
+  }
+
+  /* 「皿洗い30分」→ 内容と目標時間へ振り分ける(目標欄が空のときだけ)。
+   * 「30分」だけの発話(内容が数字で始まる)や「13時30分」のような時刻は分割しない。 */
+  function applyMinuteSplit(titleInput, targetInput) {
+    const m = titleInput.value.trim().match(/^(.*\D)[、,\s]*(?:目標)?(\d{1,3})分(?:で|以内)?$/);
+    if (!m || targetInput.value || /時間?$/.test(m[1])) return;
+    titleInput.value = m[1].replace(/[、,\s]+$/, '');
+    targetInput.value = m[2];
+  }
+
+  /* 内容入力欄に🎤ボタンを配線する。
+   * 非対応ブラウザではボタンを隠す(iOSキーボードのマイク=標準の音声入力は常に使える)。
+   * 「皿洗い30分」のように末尾に分数を言うと、目標欄が空なら内容と目標時間へ自動で振り分ける。 */
+  function initQuestMic(btn, titleInput, targetInput) {
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRec) { btn.classList.add('hidden'); return; }
+
+    btn.addEventListener('click', () => {
+      if (activeSpeech) {
+        // タップで停止: 終了イベントは遅延到着で無視されるため、ここで後始末と振り分けを行う
+        stopSpeech();
+        btn.classList.remove('listening');
+        applyMinuteSplit(titleInput, targetInput);
+        return;
+      }
+      const rec = new SpeechRec();
+      rec.lang = 'ja-JP';
+      rec.interimResults = true;
+      const base = titleInput.value;   // 既存テキストの後ろに追記する
+      rec.onresult = e => {
+        titleInput.value = base + [...e.results].map(r => r[0].transcript).join('');
+      };
+      rec.onerror = e => {
+        if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+          alert('マイクが使えませんでした。iPhoneの「設定」でSafariのマイクと「Siriと音声入力」を許可してください');
+        }
+      };
+      rec.onend = () => {
+        // 停止→即再開などで届く「古いセッション」の遅延イベントは無視する
+        // (無条件に片付けると、進行中の新セッションが停止不能になる)
+        if (activeSpeech !== rec) return;
+        activeSpeech = null;
+        btn.classList.remove('listening');
+        applyMinuteSplit(titleInput, targetInput);
+      };
+      activeSpeech = rec;
+      btn.classList.add('listening');
+      rec.start();
+    });
   }
 
   // 3択セグメントボタンの選択状態を管理
@@ -443,8 +504,11 @@ const App = (() => {
     openModal(`
       <h2 class="modal-title">${editing ? 'クエストを編集' : 'クエストを追加'}</h2>
       <div class="modal-label">内容</div>
-      <input type="text" id="quest-title-input" class="text-input" placeholder="例: スコア画面のモック作成"
-             value="${editing ? escapeHtml(editing.title) : ''}">
+      <div class="input-with-mic">
+        <input type="text" id="quest-title-input" class="text-input" placeholder="例: スコア画面のモック作成"
+               value="${editing ? escapeHtml(editing.title) : ''}">
+        <button type="button" class="mic-btn" id="btn-quest-mic" aria-label="音声入力">🎤</button>
+      </div>
       <div class="modal-label">目標完了時間(分・任意)</div>
       <input type="number" id="quest-target-input" class="text-input" inputmode="numeric" min="1" placeholder="例: 30"
              value="${editTarget}">
@@ -458,6 +522,7 @@ const App = (() => {
 
     const card = $('#modal-card');
     initSegs(card);
+    initQuestMic($('#btn-quest-mic'), $('#quest-title-input'), $('#quest-target-input'));
     const updateAmount = () => {
       const d = segValue(card.querySelector('.seg-diff'));
       const im = segValue(card.querySelector('.seg-impact'));
@@ -467,6 +532,11 @@ const App = (() => {
     updateAmount();
 
     $('#btn-quest-save').addEventListener('click', ev => {
+      // 聞き取り中に保存された場合: 先にマイクを止め、分数の振り分けを適用してから値を読む
+      if (activeSpeech) {
+        stopSpeech();
+        applyMinuteSplit($('#quest-title-input'), $('#quest-target-input'));
+      }
       const title = $('#quest-title-input').value.trim();
       if (!title) { alert('内容を入力してください'); return; }
       const d = segValue(card.querySelector('.seg-diff'));
