@@ -12,8 +12,8 @@ const AI = (() => {
   const MODEL = 'claude-sonnet-5';
   const API_URL = 'https://api.anthropic.com/v1/messages';
 
-  const DIFF_LABELS = ['低', '中', '高'];
-  const IMPACT_LABELS = ['小', '中', '大'];
+  const IMPORTANCE_LABELS = ['小', '中', '大'];
+  const HASSLE_LABELS = ['小', '中', '大'];
 
   // 応答スキーマ: クエスト3件 + 初トライヒント1件
   const OUTPUT_SCHEMA = {
@@ -26,11 +26,12 @@ const AI = (() => {
           properties: {
             projectId: { type: 'string' },
             title: { type: 'string' },
-            difficulty: { type: 'integer', enum: [0, 1, 2] },
-            impact: { type: 'integer', enum: [0, 1, 2] },
+            importance: { type: 'integer', enum: [0, 1, 2] },          // 重要度(人生への価値)
+            hassle: { type: 'integer', enum: [0, 1, 2] },              // 面倒度(腰の重さ)
+            due: { type: 'string', enum: ['today', 'week', 'any'] },   // 期限
             targetMin: { type: 'integer' },   // 目標完了時間(分)。範囲はプロンプト側で指示
           },
-          required: ['projectId', 'title', 'difficulty', 'impact', 'targetMin'],
+          required: ['projectId', 'title', 'importance', 'hassle', 'due', 'targetMin'],
           additionalProperties: false,
         },
       },
@@ -58,8 +59,8 @@ const AI = (() => {
       return '- ' + parts.join(' / ');
     }).join('\n');
 
-    const matrix = settings.priceMatrix.map((row, d) =>
-      row.map((v, i) => `難易度${DIFF_LABELS[d]}×インパクト${IMPACT_LABELS[i]}=${v}円`).join(', ')
+    const matrix = settings.priceMatrix.map((row, i) =>
+      row.map((v, h) => `重要度${IMPORTANCE_LABELS[i]}×面倒度${HASSLE_LABELS[h]}=${v}円`).join(', ')
     ).join('\n');
 
     // 持ち越し分など、今日すでにあるクエストと重複した提案を避ける
@@ -80,7 +81,10 @@ ${existingBlock}
 - 期限が近いプロジェクトを優先する
 - title は「やったら完了と判断できる具体的な作業」を日本語で簡潔に(例: スコア画面のモック作成)
 - targetMin はそのクエストの目標完了時間(分)。所要目安に合わせて15〜60の整数で設定する(締め切り効果を出すため必須)
-- difficulty(難易度)とimpact(プロジェクトの前進度・期限への寄与)を判定する。金額は次の固定料金表からアプリ側で自動算出される:
+- importance(重要度): そのクエストを終わらせることが本人の人生・生活にどれだけ効くか。お金・人間関係・健康・将来のどれかに効くなら1(中)以上、放置すると失うものが大きいなら2(大)
+- hassle(面倒度): どれだけ腰が重いか・ずっと気がかりか。0=すぐ手を付けられる、2=先送りしがち
+- due(期限): プロジェクトの期限から判断。今日中=today / 今週中=week / 急がない=any
+- 金額は次の料金表(重要度×面倒度)に期限係数(today×1.2, week×1.1)を掛けてアプリ側で自動算出される。この円は報酬ではなく「終わらせる価値」の単位:
 ${matrix}
 
 2. firstTry: 今日の「初トライ」(やったことのないことに挑戦する)のヒントを1つ。
@@ -145,17 +149,23 @@ ${matrix}
     const parsed = JSON.parse(text);
     const projectIds = new Set(projects.map(p => p.id));
 
-    const quests = parsed.quests.slice(0, 3).map(q => ({
-      id: Storage.newId('q'),
-      projectId: projectIds.has(q.projectId) ? q.projectId : null,
-      title: q.title,
-      difficulty: q.difficulty,
-      impact: q.impact,
-      amount: settings.priceMatrix[q.difficulty][q.impact], // 固定料金表で算出
-      targetMin: Number.isFinite(q.targetMin) && q.targetMin > 0 ? Math.min(999, Math.round(q.targetMin)) : null,
-      done: false,
-      manual: false,
-    }));
+    const quests = parsed.quests.slice(0, 3).map(q => {
+      const importance = [0, 1, 2].includes(q.importance) ? q.importance : 1;
+      const hassle = [0, 1, 2].includes(q.hassle) ? q.hassle : 1;
+      const due = ['today', 'week', 'any'].includes(q.due) ? q.due : 'any';
+      return {
+        id: Storage.newId('q'),
+        projectId: projectIds.has(q.projectId) ? q.projectId : null,
+        title: q.title,
+        importance, hassle, due,
+        custom: false,
+        amount: Storage.priceFor(importance, hassle, due, settings), // 料金表×期限係数で算出(AIの裁量にしない)
+        targetMin: Number.isFinite(q.targetMin) && q.targetMin > 0 ? Math.min(999, Math.round(q.targetMin)) : null,
+        done: false,
+        manual: false,
+        feeling: null,
+      };
+    });
 
     return { quests, firstTry: parsed.firstTry };
   }

@@ -172,7 +172,8 @@ body {
   padding: 14px;
   margin-bottom: 8px;
 }
-.quest-item.done { opacity: 0.55; }
+/* 完了済みは本文だけ薄くする(実感ボタンは操作できるよう薄くしない) */
+.quest-item.done .quest-title, .quest-item.done .quest-target, .quest-item.done .quest-due, .quest-item.done .quest-amount { opacity: 0.55; }
 .quest-item.done .quest-title { text-decoration: line-through; }
 .quest-check {
   width: 44px;
@@ -192,6 +193,45 @@ body {
 .quest-title { font-size: 15px; font-weight: 600; }
 /* 目標完了時間: 内容(.quest-title)と同じ大きさ・クリーム色で締め切り効果を出す */
 .quest-target { font-size: 15px; font-weight: 600; color: #ffe9a8; }
+
+/* 値付け: 特別(自由入力)・期限・完了後の実感 */
+.quest-star { margin-right: 4px; }
+.quest-feeling { margin-left: 6px; }
+.quest-due { font-size: 12px; color: var(--text-dim); }
+.feel-row { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dim); margin-top: 6px; }
+.feel-btn {
+  border: 1px solid var(--bg-card-2);
+  background: var(--bg);
+  border-radius: 999px;
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px 9px;
+  cursor: pointer;
+}
+.feel-btn:active { opacity: 0.7; }
+.modal-hint { font-size: 12px; color: var(--text-dim); margin: -4px 0 8px; }
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--tab-height) + 24px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  background: var(--bg-card-2);
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 14px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  z-index: 300;
+  pointer-events: none;
+  white-space: nowrap;
+  animation: toast-in 2.4s ease forwards;
+}
+@keyframes toast-in {
+  0%   { opacity: 0; transform: translate(-50%, 10px); }
+  12%  { opacity: 1; transform: translate(-50%, 0); }
+  80%  { opacity: 1; }
+  100% { opacity: 0; }
+}
 
 /* 音声入力(クエスト追加モーダル) */
 .input-with-mic { display: flex; gap: 8px; align-items: flex-start; }

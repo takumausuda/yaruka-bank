@@ -17,12 +17,16 @@ const Storage = (() => {
 
   const DEFAULT_SETTINGS = {
     apiKey: '',                        // Anthropic APIキー(端末外に送信しない)
-    // 固定料金表: priceMatrix[難易度][インパクト](低中高 × 小中大)
+    schemaVersion: 2,                  // データ構造の版(migrate で更新)
+    // やる価の料金表: priceMatrix[重要度][面倒度](小中大 × 小中大)
+    // 「円」は報酬ではなく、そのタスクを終わらせる価値を現金に置き換えた単位
     priceMatrix: [
-      [100, 200, 300],   // 難易度低
-      [200, 300, 500],   // 難易度中
-      [300, 500, 1000],  // 難易度高
+      [100, 200, 300],   // 重要度小
+      [300, 500, 700],   // 重要度中
+      [500, 800, 1000],  // 重要度大
     ],
+    // 期限係数: 今日中 ×1.2 / 今週中 ×1.1 / いつでも ×1(価格の主軸にはしない)
+    dueFactor: { today: 1.2, week: 1.1, any: 1 },
     morningCombo: 300,                 // モーニングコンボ固定給
     nightCombo: 300,                   // ナイトコンボ固定給
     luckyReward: 100,                  // ラッキーポスチャー記録の報酬
@@ -86,7 +90,8 @@ const Storage = (() => {
   function newDayRecord(date) {
     return {
       date,
-      // クエスト: { id, projectId, title, difficulty(0-2), impact(0-2), amount, done, manual }
+      // クエスト: { id, projectId, title, importance(0-2), hassle(0-2), due('today'|'week'|'any'),
+      //             custom(金額を自分で決めた), amount, done, manual, feeling(null|0-2), targetMin, carried }
       quests: [],
       morningCombo: false,
       nightCombo: false,
@@ -175,6 +180,51 @@ const Storage = (() => {
     const days = getAllDays();
     days[record.date] = record;
     save(KEYS.days, days);
+  }
+
+  /* ---------- スキーマ移行(起動時・復元時に1回) ----------
+   * v2 (2026-09): 値付けを「難易度×インパクト」から「重要度×面倒度(+期限)」へ。
+   * 金額(amount)は確定済みのスナップショットなので変更せず、貯金額は一切動かさない。 */
+  const OLD_DEFAULT_MATRIX = [[100, 200, 300], [200, 300, 500], [300, 500, 1000]];
+
+  function migrate() {
+    const stored = load(KEYS.settings, {});
+    if ((stored.schemaVersion ?? 1) >= 2) return false;
+
+    const settings = getSettings();
+    if (stored.priceMatrix && JSON.stringify(stored.priceMatrix) !== JSON.stringify(OLD_DEFAULT_MATRIX)) {
+      // カスタマイズ済みの料金表は意味を保って転置する
+      // (旧 [難易度][インパクト] → 新 [重要度=インパクト][面倒度=難易度])
+      settings.priceMatrix = [0, 1, 2].map(i =>
+        [0, 1, 2].map(h => stored.priceMatrix[h]?.[i] ?? DEFAULT_SETTINGS.priceMatrix[i][h]));
+    } else {
+      settings.priceMatrix = DEFAULT_SETTINGS.priceMatrix.map(r => [...r]);
+    }
+    settings.schemaVersion = 2;
+    saveSettings(settings);
+
+    // クエストに新フィールドを補完(金額は据え置き)
+    const days = getAllDays();
+    for (const rec of Object.values(days)) {
+      for (const q of rec.quests ?? []) {
+        if (q.importance === undefined) q.importance = [0, 1, 2].includes(q.impact) ? q.impact : 0;
+        if (q.hassle === undefined) q.hassle = [0, 1, 2].includes(q.difficulty) ? q.difficulty : 0;
+        if (q.due === undefined) q.due = 'any';
+        if (q.custom === undefined) q.custom = false;
+        if (q.feeling === undefined) q.feeling = null;
+        delete q.difficulty;
+        delete q.impact;
+      }
+    }
+    save(KEYS.days, days);
+    return true;
+  }
+
+  // 重要度×面倒度の料金表に期限係数を掛け、10円単位に丸める
+  function priceFor(importance, hassle, due, settings = getSettings()) {
+    const base = settings.priceMatrix[importance]?.[hassle] ?? 0;
+    const factor = settings.dueFactor?.[due] ?? 1;
+    return Math.round(base * factor / 10) * 10;
   }
 
   /* 前日までの未完了クエストを今日へ持ち越す。
@@ -403,7 +453,7 @@ const Storage = (() => {
     getHabits, saveHabits,
     getGauges, saveGauges,
     getStreak, saveStreak,
-    getAllDays, getDay, saveDay, rolloverQuests,
+    getAllDays, getDay, saveDay, rolloverQuests, migrate, priceFor,
     dayTotal, computeStreak, streakInfo, refreshBonus,
     rolloverGauges, allocate, unallocate, syncBanking,
     exportAll, importAll,

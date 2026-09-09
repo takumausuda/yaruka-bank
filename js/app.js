@@ -11,8 +11,12 @@ const App = (() => {
 
   const yen = n => n.toLocaleString('ja-JP');
 
-  const DIFF_LABELS = ['低', '中', '高'];
-  const IMPACT_LABELS = ['小', '中', '大'];
+  // 値付けの3指標: 重要度(人生への価値)× 面倒度(腰の重さ)、期限は係数。実感は完了後に記録
+  const IMPORTANCE_LABELS = ['小', '中', '大'];
+  const HASSLE_LABELS = ['小', '中', '大'];
+  const DUE_KEYS = ['today', 'week', 'any'];
+  const DUE_LABELS = ['今日中', '今週中', 'いつでも'];
+  const FEELING_EMOJI = ['😐', '🙂', '🤩'];
 
   /* ==================== 演出(4.4 即時報酬感) ==================== */
 
@@ -231,9 +235,11 @@ const App = (() => {
           <li class="quest-item ${q.done ? 'done' : ''}" data-quest-id="${q.id}">
             <button class="quest-check" aria-label="完了">${q.done ? '✓' : ''}</button>
             <div class="quest-body">
-              <div class="quest-title">${escapeHtml(q.title)}</div>
+              <div class="quest-title">${q.custom ? '<span class="quest-star" title="金額を自分で決めたクエスト">⭐</span>' : ''}${escapeHtml(q.title)}${q.feeling != null && FEELING_EMOJI[q.feeling] ? `<span class="quest-feeling">${FEELING_EMOJI[q.feeling]}</span>` : ''}</div>
               ${targetMin > 0 ? `<div class="quest-target">⏱ 目標${Math.min(999, Math.round(targetMin))}分</div>` : ''}
+              ${q.due === 'today' || q.due === 'week' ? `<div class="quest-due">⏳ ${DUE_LABELS[DUE_KEYS.indexOf(q.due)]}</div>` : ''}
               ${q.carried ? '<div class="quest-carried">⏪ 持ち越し</div>' : ''}
+              ${q.done && q.feeling == null ? `<div class="feel-row">終えてみて… ${FEELING_EMOJI.map((e, i) => `<button type="button" class="feel-btn" data-feel="${i}" aria-label="実感${i}">${e}</button>`).join('')}</div>` : ''}
             </div>
             <div class="quest-amount">${yen(q.amount)}円</div>
           </li>`;
@@ -440,7 +446,7 @@ const App = (() => {
     $('#toggle-sound').checked = settings.soundOn;
 
     $('#price-table tbody').innerHTML = settings.priceMatrix.map((row, i) => `
-      <tr><th>${DIFF_LABELS[i]}</th>${row.map((v, j) =>
+      <tr><th>${IMPORTANCE_LABELS[i]}</th>${row.map((v, j) =>
         `<td class="price-cell" data-row="${i}" data-col="${j}">${yen(v)}</td>`).join('')}</tr>`).join('');
   }
 
@@ -463,6 +469,7 @@ const App = (() => {
     const q = day.quests.find(x => x.id === questId);
     if (!q) return;
     q.done = !q.done;
+    if (!q.done) q.feeling = null;   // 完了を取り消したら実感もリセット
     commitDay(day, ev);
   }
 
@@ -483,6 +490,27 @@ const App = (() => {
     if (next === current) return;
     day.habitCounts[habitId] = next;
     commitDay(day, ev);
+  }
+
+  // 完了後の実感(😐/🙂/🤩)。値付けの材料ではなく「やった結果」なので金額には影響させない
+  function setFeeling(questId, feeling) {
+    const day = Storage.getDay();
+    const q = day.quests.find(x => x.id === questId);
+    if (!q || !q.done || !FEELING_EMOJI[feeling]) return;
+    q.feeling = feeling;
+    Storage.saveDay(day);
+    if (feeling === 2 && q.hassle === 2) toast('面倒でも、やってみたら最高。それが「やる価」');
+    else if (feeling === 2) toast('最高の手応え!');
+    render();
+  }
+
+  // 画面下に一言だけ出して消えるメッセージ
+  function toast(msg) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = msg;
+    document.body.appendChild(el);
+    el.addEventListener('animationend', () => el.remove());
   }
 
   /* ==================== モーダル各種 ==================== */
@@ -512,9 +540,17 @@ const App = (() => {
       <div class="modal-label">目標完了時間(分・任意)</div>
       <input type="number" id="quest-target-input" class="text-input" inputmode="numeric" min="1" placeholder="例: 30"
              value="${editTarget}">
-      ${segRow('難易度', 'seg-diff', DIFF_LABELS, editing?.difficulty ?? 0)}
-      ${segRow('インパクト', 'seg-impact', IMPACT_LABELS, editing?.impact ?? 0)}
-      <div class="modal-amount">報酬: <strong id="quest-amount-preview"></strong></div>
+      <div id="quest-auto-block" class="${editing?.custom ? 'hidden' : ''}">
+        ${segRow('重要度(人生への価値)', 'seg-importance', IMPORTANCE_LABELS, editing?.importance ?? 0)}
+        <p class="modal-hint">お金・人間関係・健康・将来のどれかに効くなら「中」以上。放置すると失うものが大きいなら「大」</p>
+        ${segRow('面倒度(腰の重さ)', 'seg-hassle', HASSLE_LABELS, editing?.hassle ?? 0)}
+        <p class="modal-hint">始めたくない・ずっと気がかり、なほど「大」</p>
+        ${segRow('期限', 'seg-due', DUE_LABELS, Math.max(0, DUE_KEYS.indexOf(editing?.due ?? 'any')))}
+        <div class="modal-amount">やる価: <strong id="quest-amount-preview"></strong></div>
+      </div>
+      <label class="toggle-row"><span>⭐ 金額を自分で決める</span><input type="checkbox" id="quest-custom-toggle" ${editing?.custom ? 'checked' : ''}></label>
+      <input type="number" id="quest-custom-amount" class="text-input ${editing?.custom ? '' : 'hidden'}" inputmode="numeric" min="1" placeholder="例: 10000"
+             value="${editing?.custom && Number(editing.amount) > 0 ? Math.round(Number(editing.amount)) : ''}">
       <button class="btn btn-primary" id="btn-quest-save">${editing ? '保存' : '追加'}</button>
       ${editing ? '<button class="btn btn-danger" id="btn-quest-delete">削除</button>' : ''}
       <button class="btn" id="btn-modal-cancel">キャンセル</button>
@@ -523,13 +559,26 @@ const App = (() => {
     const card = $('#modal-card');
     initSegs(card);
     initQuestMic($('#btn-quest-mic'), $('#quest-title-input'), $('#quest-target-input'));
+    const readSegs = () => ({
+      importance: segValue(card.querySelector('.seg-importance')),
+      hassle: segValue(card.querySelector('.seg-hassle')),
+      due: DUE_KEYS[segValue(card.querySelector('.seg-due'))] ?? 'any',
+    });
     const updateAmount = () => {
-      const d = segValue(card.querySelector('.seg-diff'));
-      const im = segValue(card.querySelector('.seg-impact'));
-      $('#quest-amount-preview').textContent = yen(settings.priceMatrix[d][im]) + '円';
+      const { importance, hassle, due } = readSegs();
+      $('#quest-amount-preview').textContent = yen(Storage.priceFor(importance, hassle, due, settings)) + '円';
     };
     card.addEventListener('segchange', updateAmount);
     updateAmount();
+
+    // ⭐ 金額を自分で決める: ONで料金表を隠し、自由入力欄を出す
+    const customToggle = $('#quest-custom-toggle');
+    const customInput = $('#quest-custom-amount');
+    customToggle.addEventListener('change', () => {
+      $('#quest-auto-block').classList.toggle('hidden', customToggle.checked);
+      customInput.classList.toggle('hidden', !customToggle.checked);
+      if (customToggle.checked) customInput.focus();
+    });
 
     $('#btn-quest-save').addEventListener('click', ev => {
       // 聞き取り中に保存された場合: 先にマイクを止め、分数の振り分けを適用してから値を読む
@@ -539,20 +588,27 @@ const App = (() => {
       }
       const title = $('#quest-title-input').value.trim();
       if (!title) { alert('内容を入力してください'); return; }
-      const d = segValue(card.querySelector('.seg-diff'));
-      const im = segValue(card.querySelector('.seg-impact'));
-      const amount = settings.priceMatrix[d][im];
+      const { importance, hassle, due } = readSegs();
+      const custom = customToggle.checked;
+      let amount;
+      if (custom) {
+        // 自由入力: 本人が「このタスクは幾らの価値か」を宣言する(上限なし)
+        amount = Math.round(Number(customInput.value));
+        if (!(amount > 0)) { alert('金額を入力してください(1円以上)'); return; }
+      } else {
+        amount = Storage.priceFor(importance, hassle, due, settings);
+      }
       // 目標完了時間: 分数のみ。空欄・四捨五入で0以下になる値は「目標なし」
       const targetRaw = Math.round(Number($('#quest-target-input').value));
       const targetMin = Number.isFinite(targetRaw) && targetRaw > 0 ? Math.min(999, targetRaw) : null;
       const dayNow = Storage.getDay();
       if (editing) {
         const q = dayNow.quests.find(x => x.id === questId);
-        Object.assign(q, { title, targetMin, difficulty: d, impact: im, amount });
+        Object.assign(q, { title, targetMin, importance, hassle, due, custom, amount });
       } else {
         dayNow.quests.push({
           id: Storage.newId('q'), projectId: null, title, targetMin,
-          difficulty: d, impact: im, amount, done: false, manual: true,
+          importance, hassle, due, custom, amount, done: false, manual: true, feeling: null,
         });
       }
       closeModal();
@@ -773,6 +829,11 @@ const App = (() => {
     $('#quest-list').addEventListener('click', e => {
       const item = e.target.closest('.quest-item');
       if (!item) return;
+      const feelBtn = e.target.closest('.feel-btn');
+      if (feelBtn) {
+        setFeeling(item.dataset.questId, Number(feelBtn.dataset.feel));
+        return;
+      }
       if (e.target.closest('.quest-check')) {
         toggleQuest(item.dataset.questId, e);
       } else {
@@ -829,7 +890,7 @@ const App = (() => {
       const { row, col } = cell.dataset;
       const settings = Storage.getSettings();
       const current = settings.priceMatrix[row][col];
-      const input = prompt(`難易度${DIFF_LABELS[row]} × インパクト${IMPACT_LABELS[col]} の金額(円)`, current);
+      const input = prompt(`重要度${IMPORTANCE_LABELS[row]} × 面倒度${HASSLE_LABELS[col]} の金額(円)`, current);
       if (input === null) return;
       const value = Number(input);
       if (!(value >= 0)) { alert('数値を入力してください'); return; }
@@ -854,6 +915,7 @@ const App = (() => {
       if (!text) return;
       try {
         Storage.importAll(text);
+        Storage.migrate();   // 旧版のバックアップでも新しい値付け形式に揃える
         alert('復元しました');
         render();
       } catch (e) {
@@ -876,6 +938,7 @@ const App = (() => {
   /* ---------- 起動 ---------- */
 
   function init() {
+    Storage.migrate();   // データ構造の移行(初回のみ実行される。金額・貯金は動かさない)
     initTabs();
     initEvents();
     // 起動時にも今日の獲得額とゲージのズレを解消する
