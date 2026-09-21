@@ -17,7 +17,7 @@ const Storage = (() => {
 
   const DEFAULT_SETTINGS = {
     apiKey: '',                        // Anthropic APIキー(端末外に送信しない)
-    schemaVersion: 2,                  // データ構造の版(migrate で更新)
+    schemaVersion: 3,                  // データ構造の版(migrate で更新)
     // やる価の料金表: priceMatrix[重要度][面倒度](小中大 × 小中大)
     // 「円」は報酬ではなく、そのタスクを終わらせる価値を現金に置き換えた単位
     priceMatrix: [
@@ -25,8 +25,8 @@ const Storage = (() => {
       [300, 500, 700],   // 重要度中
       [500, 800, 1000],  // 重要度大
     ],
-    // 期限係数: 今日中 ×1.2 / 今週中 ×1.1 / いつでも ×1(価格の主軸にはしない)
-    dueFactor: { today: 1.2, week: 1.1, any: 1 },
+    // 期限係数: 今すぐ ×1.2 / 3時間以内 ×1.1 / 今日中 ×1(価格の主軸にはしない)
+    dueFactor: { now: 1.2, soon: 1.1, today: 1 },
     morningCombo: 300,                 // モーニングコンボ固定給
     nightCombo: 300,                   // ナイトコンボ固定給
     luckyReward: 100,                  // ラッキーポスチャー記録の報酬
@@ -90,7 +90,7 @@ const Storage = (() => {
   function newDayRecord(date) {
     return {
       date,
-      // クエスト: { id, projectId, title, importance(0-2), hassle(0-2), due('today'|'week'|'any'),
+      // クエスト: { id, projectId, title, importance(0-2), hassle(0-2), due('now'|'soon'|'today'),
       //             custom(金額を自分で決めた), amount, done, manual, feeling(null|0-2), targetMin, carried }
       quests: [],
       morningCombo: false,
@@ -188,9 +188,32 @@ const Storage = (() => {
   const OLD_DEFAULT_MATRIX = [[100, 200, 300], [200, 300, 500], [300, 500, 1000]];
 
   function migrate() {
-    const stored = load(KEYS.settings, {});
-    if ((stored.schemaVersion ?? 1) >= 2) return false;
+    const version = load(KEYS.settings, {}).schemaVersion ?? 1;
+    if (version >= 3) return false;
+    if (version < 2) migrateToV2();
+    migrateToV3();
+    return true;
+  }
 
+  /* v3 (2026-09-21): 期限を「今日中/今週中/いつでも」から「今すぐ/3時間以内/今日中」へ。
+   * 旧 week / any は今日中へ寄せる。金額(amount)は据え置き。 */
+  function migrateToV3() {
+    const settings = getSettings();
+    settings.dueFactor = { ...DEFAULT_SETTINGS.dueFactor };
+    settings.schemaVersion = 3;
+    saveSettings(settings);
+
+    const days = getAllDays();
+    for (const rec of Object.values(days)) {
+      for (const q of rec.quests ?? []) {
+        if (!['now', 'soon', 'today'].includes(q.due)) q.due = 'today';
+      }
+    }
+    save(KEYS.days, days);
+  }
+
+  function migrateToV2() {
+    const stored = load(KEYS.settings, {});
     const settings = getSettings();
     if (stored.priceMatrix && JSON.stringify(stored.priceMatrix) !== JSON.stringify(OLD_DEFAULT_MATRIX)) {
       // カスタマイズ済みの料金表は意味を保って転置する
@@ -217,7 +240,6 @@ const Storage = (() => {
       }
     }
     save(KEYS.days, days);
-    return true;
   }
 
   // 重要度×面倒度の料金表に期限係数を掛け、10円単位に丸める

@@ -14,8 +14,9 @@ const App = (() => {
   // 値付けの3指標: 重要度(人生への価値)× 面倒度(腰の重さ)、期限は係数。実感は完了後に記録
   const IMPORTANCE_LABELS = ['小', '中', '大'];
   const HASSLE_LABELS = ['小', '中', '大'];
-  const DUE_KEYS = ['today', 'week', 'any'];
-  const DUE_LABELS = ['今日中', '今週中', 'いつでも'];
+  const DUE_KEYS = ['now', 'soon', 'today'];
+  const DUE_LABELS = ['今すぐ', '3時間以内', '今日中'];
+  const dueIndex = due => { const i = DUE_KEYS.indexOf(due); return i >= 0 ? i : 2; };   // 不明な値は今日中
   const FEELING_EMOJI = ['😐', '🙂', '🤩'];
 
   /* ==================== 演出(4.4 即時報酬感) ==================== */
@@ -237,7 +238,7 @@ const App = (() => {
             <div class="quest-body">
               <div class="quest-title">${q.custom ? '<span class="quest-star" title="金額を自分で決めたクエスト">⭐</span>' : ''}${escapeHtml(q.title)}${q.feeling != null && FEELING_EMOJI[q.feeling] ? `<span class="quest-feeling">${FEELING_EMOJI[q.feeling]}</span>` : ''}</div>
               ${targetMin > 0 ? `<div class="quest-target">⏱ 目標${Math.min(999, Math.round(targetMin))}分</div>` : ''}
-              ${q.due === 'today' || q.due === 'week' ? `<div class="quest-due">⏳ ${DUE_LABELS[DUE_KEYS.indexOf(q.due)]}</div>` : ''}
+              ${q.due === 'now' || q.due === 'soon' ? `<div class="quest-due">⏳ ${DUE_LABELS[dueIndex(q.due)]}</div>` : ''}
               ${q.carried ? '<div class="quest-carried">⏪ 持ち越し</div>' : ''}
               ${q.done && q.feeling == null ? `<div class="feel-row">終えてみて… ${FEELING_EMOJI.map((e, i) => `<button type="button" class="feel-btn" data-feel="${i}" aria-label="実感${i}">${e}</button>`).join('')}</div>` : ''}
             </div>
@@ -545,7 +546,7 @@ const App = (() => {
         <p class="modal-hint">お金・人間関係・健康・将来のどれかに効くなら「中」以上。放置すると失うものが大きいなら「大」</p>
         ${segRow('面倒度(腰の重さ)', 'seg-hassle', HASSLE_LABELS, editing?.hassle ?? 0)}
         <p class="modal-hint">始めたくない・ずっと気がかり、なほど「大」</p>
-        ${segRow('期限', 'seg-due', DUE_LABELS, Math.max(0, DUE_KEYS.indexOf(editing?.due ?? 'any')))}
+        ${segRow('期限', 'seg-due', DUE_LABELS, dueIndex(editing?.due))}
         <div class="modal-amount">やる価: <strong id="quest-amount-preview"></strong></div>
       </div>
       <label class="toggle-row"><span>⭐ 金額を自分で決める</span><input type="checkbox" id="quest-custom-toggle" ${editing?.custom ? 'checked' : ''}></label>
@@ -562,7 +563,7 @@ const App = (() => {
     const readSegs = () => ({
       importance: segValue(card.querySelector('.seg-importance')),
       hassle: segValue(card.querySelector('.seg-hassle')),
-      due: DUE_KEYS[segValue(card.querySelector('.seg-due'))] ?? 'any',
+      due: DUE_KEYS[segValue(card.querySelector('.seg-due'))] ?? 'today',
     });
     const updateAmount = () => {
       const { importance, hassle, due } = readSegs();
